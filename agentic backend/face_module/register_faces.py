@@ -42,6 +42,20 @@ while True:
             face_img = roi
         filename = os.path.join(folder, f"{count}.jpg")
         cv2.imwrite(filename, face_img)
+
+        # also save to MongoDB if enabled
+        try:
+            from config import USE_MONGO
+            if USE_MONGO:
+                from database import mongo_db as mdb
+                # encode as jpg bytes
+                ok, buf = cv2.imencode('.jpg', face_img)
+                if ok:
+                    mdb.save_face(name, os.path.basename(filename), buf.tobytes())
+                    print("Saved face to MongoDB for", name)
+        except Exception as e:
+            print("Mongo save failed:", e)
+
         count += 1
         print("Saved cropped face:", filename)
 

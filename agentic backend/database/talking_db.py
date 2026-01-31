@@ -1,6 +1,7 @@
 import csv
 import os
 from datetime import datetime
+from config import USE_MONGO
 
 TALK_FILE = os.path.join(os.path.dirname(__file__), "talk_log.csv")
 
@@ -14,6 +15,14 @@ def init_db():
 
 
 def log_speech(name: str, start_time: datetime, duration: float):
+    if USE_MONGO:
+        try:
+            from database import mongo_db as mdb
+            mdb.log_speech(name, start_time, duration)
+            return
+        except Exception as e:
+            print("MongoDB log_speech failed:", e)
+
     init_db()
     start_iso = start_time.isoformat()
     with open(TALK_FILE, "a", newline="") as f:
@@ -22,6 +31,13 @@ def log_speech(name: str, start_time: datetime, duration: float):
 
 
 def read_all():
+    if USE_MONGO:
+        try:
+            from database import mongo_db as mdb
+            return mdb.read_all_speech()
+        except Exception as e:
+            print("MongoDB read_all_speech failed:", e)
+
     init_db()
     rows = []
     with open(TALK_FILE, "r", newline="") as f:

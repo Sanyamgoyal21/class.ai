@@ -3,6 +3,18 @@ from datetime import datetime
 from face_module.recognize_faces import FaceRecognizer
 from audio_module.vad import VADDetector
 from database import talking_db as tdb
+from config import USE_MONGO
+
+if USE_MONGO:
+    try:
+        # test Mongo availability
+        from database import mongo_db as mdb
+        _ = mdb.get_faces_for_training()[:1]
+    except Exception as e:
+        print("Warning: MongoDB appears enabled but not available or not configured correctly:", e)
+        print("Falling back to filesystem/CSV for now.")
+        # set USE_MONGO to False locally to avoid further errors
+        USE_MONGO = False
 
 
 def choose_speaker(faces):

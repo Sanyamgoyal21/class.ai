@@ -40,26 +40,52 @@ class FaceRecognizer(threading.Thread):
         self.label2name = {}
 
         if self.use_fr:
-            # load known faces with face_recognition
+            # load known faces with face_recognition (either from filesystem or MongoDB)
             self.known_encodings = []
             self.known_names = []
 
-            for student in os.listdir(self.known_dir):
-                student_dir = os.path.join(self.known_dir, student)
-                if not os.path.isdir(student_dir):
-                    continue
-                for img in os.listdir(student_dir):
-                    path = os.path.join(student_dir, img)
-                    try:
-                        image = face_recognition.load_image_file(path)
-                        encoding = face_recognition.face_encodings(image)
-                        if encoding:
-                            self.known_encodings.append(encoding[0])
-                            self.known_names.append(student)
-                    except Exception:
-                        continue
+            try:
+                from config import USE_MONGO
+                if USE_MONGO:
+                    from database import mongo_db as mdb
+                    docs = mdb.get_faces_for_training()
+                    for item in docs:
+                        name = item.get("name")
+                        img = item.get("img")  # BGR or gray
+                        try:
+                            if img.ndim == 2:
+                                rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+                            else:
+                                rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                            enc = face_recognition.face_encodings(rgb)
+                            if enc:
+                                self.known_encodings.append(enc[0])
+                                self.known_names.append(name)
+                        except Exception:
+                            continue
+                else:
+                    for student in os.listdir(self.known_dir):
+                        student_dir = os.path.join(self.known_dir, student)
+                        if not os.path.isdir(student_dir):
+                            continue
+                        for img in os.listdir(student_dir):
+                            path = os.path.join(student_dir, img)
+                            try:
+                                image = face_recognition.load_image_file(path)
+                                encoding = face_recognition.face_encodings(image)
+                                if encoding:
+                                    self.known_encodings.append(encoding[0])
+                                    self.known_names.append(student)
+                            except Exception:
+                                continue
 
-            print("Using dlib/face_recognition for face matching.")
+                print("Using dlib/face_recognition for face matching.")
+            except Exception as e:
+                print("Error loading faces for face_recognition:", e)
+                # fall back to filesystem load
+                self.known_encodings = []
+                self.known_names = []
+
         else:
             # fallback: train LBPH on available images
             print("face_recognition not available; using OpenCV LBPH fallback.")
@@ -74,28 +100,63 @@ class FaceRecognizer(threading.Thread):
         name_to_label = {}
         label = 0
 
-        for student in os.listdir(self.known_dir):
-            student_dir = os.path.join(self.known_dir, student)
-            if not os.path.isdir(student_dir):
-                continue
-            name_to_label[student] = label
-            self.label2name[label] = student
+        try:
+            from config import USE_MONGO
+        except Exception:
+            USE_MONGO = False
 
-            for img in os.listdir(student_dir):
-                path = os.path.join(student_dir, img)
-                try:
-                    im = cv2.imread(path)
-                    gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-                    faces = self.detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4)
-                    for (x, y, w, h) in faces:
-                        roi = gray[y:y+h, x:x+w]
-                        roi = cv2.resize(roi, (200, 200))
-                        images.append(roi)
-                        labels.append(label)
-                except Exception:
+        if USE_MONGO:
+            try:
+                from database import mongo_db as mdb
+                docs = mdb.get_faces_for_training()
+                for item in docs:
+                    name = item.get("name")
+                    img = item.get("img")
+                    if img is None:
+                        continue
+                    # ensure grayscale
+                    if img.ndim == 3:
+                        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                    else:
+                        gray = img
+                    try:
+                        roi = cv2.resize(gray, (200, 200))
+                    except Exception:
+                        roi = gray
+
+                    if name not in name_to_label:
+                        name_to_label[name] = label
+                        self.label2name[label] = name
+                        label += 1
+                    images.append(roi)
+                    labels.append(name_to_label[name])
+            except Exception as e:
+                print("LBPH mongo training failed:", e)
+                USE_MONGO = False
+
+        if not USE_MONGO:
+            for student in os.listdir(self.known_dir):
+                student_dir = os.path.join(self.known_dir, student)
+                if not os.path.isdir(student_dir):
                     continue
+                name_to_label[student] = label
+                self.label2name[label] = student
 
-            label += 1
+                for img in os.listdir(student_dir):
+                    path = os.path.join(student_dir, img)
+                    try:
+                        im = cv2.imread(path)
+                        gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+                        faces = self.detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4)
+                        for (x, y, w, h) in faces:
+                            roi = gray[y:y+h, x:x+w]
+                            roi = cv2.resize(roi, (200, 200))
+                            images.append(roi)
+                            labels.append(label)
+                    except Exception:
+                        continue
+
+                label += 1
 
         if not images:
             print("LBPH training: no faces found in data; recognizer disabled.")
