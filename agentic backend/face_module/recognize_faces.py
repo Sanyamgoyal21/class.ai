@@ -1,4 +1,5 @@
 import threading
+
 import cv2
 import os
 import numpy as np
@@ -12,7 +13,6 @@ try:
     USE_FACE_RECOGNITION = True
 except Exception:
     USE_FACE_RECOGNITION = False
-
 
 class FaceRecognizer(threading.Thread):
     """Runs face recognition (dlib) or OpenCV LBPH fallback in a background thread.
