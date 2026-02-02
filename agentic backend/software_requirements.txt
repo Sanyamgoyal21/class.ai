@@ -1,0 +1,49 @@
+# Software / system dependencies (links & install notes)
+
+1) Python (must 3.10)
+   - Download: https://www.python.org/downloads/
+   - Install: choose "Add Python to PATH" on Windows installer.
+
+2) MongoDB Community Server (for storing faces / attendance)
+   - Download: https://www.mongodb.com/try/download/community
+   - Quick start (Windows): install MSI, start the MongoDB Windows service or run `mongod`.
+   - Set environment variable for the app (PowerShell):
+     setx MONGO_URI "mongodb://localhost:27017"
+     Restart your terminal/VS Code for the env var to be visible.
+
+3) Visual Studio Build Tools (required to compile dlib on Windows)
+   - Download: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+   - During install select: "Desktop development with C++" workload.
+   - After installation use *x64 Native Tools Command Prompt* (Start menu) or run:
+     "C:\Program Files (x86)\Microsoft Visual Studio\20xx\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
+   - Verify 'cl' is available: run `cl` in the native tools prompt.
+
+4) CMake (required to build dlib)
+   - Download: https://cmake.org/download/
+   - When installing add CMake to your PATH.
+   - Verify: `cmake --version`
+
+5) PortAudio / PyAudio (microphone access)
+   - PortAudio: https://portaudio.com/
+   - Windows: use prebuilt wheel via pipwin or Gohlke wheels (https://www.lfd.uci.edu/~gohlke/pythonlibs/)
+   - Commands: `pip install pipwin` then `pipwin install pyaudio`
+
+6) (Optional recommended) Miniconda / Anaconda (easier approach to get prebuilt dlib)
+   - Download Miniconda: https://docs.conda.io/en/latest/miniconda.html
+   - Example commands:
+     conda create -n attend python=3.10 -y
+     conda activate attend
+     conda install -c conda-forge dlib -y
+     pip install face_recognition opencv-contrib-python pymongo webrtcvad
+
+7) Git (for repository management)
+   - Download: https://git-scm.com/downloads
+   - Example: `git clone <repo>` ; `git pull origin main`
+
+8) Notes on Windows pitfalls / tips
+   - If `dlib` build fails: ensure CMake and MSVC toolchain are installed and you used the x64 Native Tools command prompt.
+   - If `pipwin` fails on Python 3.13, prefer using conda/Miniconda or install matching wheels from Gohlke.
+   - If OpenCV LBPH fallback is required, install `opencv-contrib-python` (includes `cv2.face` module).
+
+---
+If you'd like, I can also create a small `setup_instructions.md` with step-by-step screenshots/commands tailored to Windows and include the exact commands your partner should run. Would you like that? (Yes/No)
