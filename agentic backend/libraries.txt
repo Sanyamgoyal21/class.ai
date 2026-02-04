@@ -1,27 +1,19 @@
-# Python libraries to install for the project
-# Recommended: create and activate a virtual environment first
-# Windows (venv):
-#   python -m venv venv
-#   venv\Scripts\activate
+# Core libraries
+opencv-contrib-python
+numpy
+Pillow
+webrtcvad
+pymongo
 
-# Core (fast install):
-pip install --user opencv-contrib-python numpy Pillow webrtcvad pymongo
+# Optional / advanced features
+face_recognition
+dlib
+pyaudio
+python-dotenv
 
-# Optional / features:
-pip install --user face_recognition    # high-accuracy face matching (requires dlib)
-pip install --user dlib               # may need CMake + MSVC or use conda to get prebuilt
-pip install --user pyaudio            # requires PortAudio; on Windows use pipwin or wheel
-pip install --user python-dotenv      # (if using .env for MONGO_URI)
+# Supernode communication
+python-socketio[client]
 
-# Development / convenience:
-pip install --user pytest flake8
-
-# Notes:
-# - If dlib fails to build on Windows, prefer using conda for dlib (see software_requirements.txt).
-# - If pyaudio installation fails, use 'pipwin' to install a prebuilt wheel: pip install pipwin; pipwin install pyaudio
-
-# Alternative (conda) recommended for Windows when building native packages:
-# conda create -n attend python=3.10 -y
-# conda activate attend
-# conda install -c conda-forge dlib opencv -y
-# pip install face_recognition opencv-contrib-python webrtcvad pymongo
+# Development / utilities
+pytest
+flake8

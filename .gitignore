@@ -4,3 +4,5 @@ data/
 .DS_Store
 .vscode/
 .vite/
+.claude/
+.github/

@@ -5,6 +5,8 @@ import os
 import numpy as np
 import time
 from datetime import datetime
+import sys
+sys.path.append('..')
 from database import attendence_db as adb
 
 # Optional: prefer face_recognition (dlib), but fall back to OpenCV LBPH if unavailable
