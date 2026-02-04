@@ -45,6 +45,13 @@ except ImportError:
     HAS_DOUBT_ASSISTANT = False
     print("[Classroom] Doubt Assistant not available")
 
+try:
+    from ai_module.local_ollama import LocalOllama
+    HAS_LOCAL_OLLAMA = True
+except ImportError:
+    HAS_LOCAL_OLLAMA = False
+    print("[Classroom] Local Ollama not available")
+
 
 class ClassroomRunner:
     """Runs classroom device with face recognition, VAD, and Supernode connectivity."""
@@ -76,6 +83,7 @@ class ClassroomRunner:
         self._recognizer = None
         self._vad = None
         self._stt = None  # Speech-to-Text
+        self._local_ollama = None  # Local AI for doubt resolution
         self._doubt_assistant = None  # Doubt mode state machine
         self._current_faces = []  # Currently visible faces
         self._last_stream_time = 0
@@ -237,10 +245,21 @@ class ClassroomRunner:
                 print("[Classroom] Speech-to-Text failed to initialize")
                 self._stt = None
 
+        # Initialize Local Ollama for doubt resolution
+        if HAS_LOCAL_OLLAMA:
+            print("[Classroom] Initializing Local Ollama...")
+            self._local_ollama = LocalOllama()
+            if self._local_ollama.check_health(force=True):
+                print(f"[Classroom] Local Ollama initialized (model: {self._local_ollama.model})")
+            else:
+                print("[Classroom] Local Ollama not available, will use supernode fallback")
+                self._local_ollama = None
+
         # Initialize Doubt Assistant
         if HAS_DOUBT_ASSISTANT and self._client:
             self._doubt_assistant = DoubtAssistant(
                 client=self._client,
+                local_ollama=self._local_ollama,  # Pass local Ollama for local AI inference
                 on_state_change=self._on_doubt_state_change,
                 on_doubt_processed=self._on_doubt_processed,
             )

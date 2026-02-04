@@ -304,6 +304,43 @@ class ClassroomClient(DeviceClient):
 
         self.on_broadcast = combined_broadcast
 
+    def emit_local_ai_response(self, response, source, question, speaker, latency_ms=0):
+        """
+        Emit local AI response to classroom display and dashboard.
+
+        This is used when the AI inference happens locally on the classroom device
+        (via local Ollama) rather than on the supernode.
+
+        Args:
+            response: The AI-generated response text
+            source: Source identifier (e.g., "local-ollama")
+            question: The original question from the student
+            speaker: The student who asked the question
+            latency_ms: Response latency in milliseconds
+
+        Returns:
+            True if emitted successfully, False otherwise
+        """
+        if not self._connected:
+            print("[ClassroomClient] Not connected, cannot emit local AI response")
+            return False
+
+        payload = {
+            "deviceId": self.device_id,
+            "response": response,
+            "source": source,
+            "question": question,
+            "speaker": speaker or "Student",
+            "latencyMs": latency_ms,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        # Emit to supernode which will broadcast to:
+        # 1. classroom display (to show the answer)
+        # 2. dashboard (for logging)
+        self.sio.emit("ai:local-response", payload)
+        return True
+
 
 # Example usage
 if __name__ == "__main__":

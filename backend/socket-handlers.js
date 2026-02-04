@@ -195,6 +195,39 @@ export function setupSocketHandlers(io) {
       }
     });
 
+    // Local AI response from classroom device (for doubt resolution)
+    // This is emitted when AI inference runs locally on the classroom device via Ollama
+    socket.on("ai:local-response", (data) => {
+      const device = deviceRegistry.get(socket.id);
+      if (!device) return;
+
+      const { response, source, question, speaker, latencyMs } = data;
+      console.log(`Local AI response from ${device.deviceId}: ${response?.substring(0, 50)}...`);
+
+      // Broadcast to ALL classroom devices (so HTML display shows the answer)
+      io.to("device:classroom").emit("ai:response", {
+        queryId: Date.now().toString(),
+        response: response,
+        source: source,
+        fromDevice: device.deviceId,
+        speaker: speaker,
+        isLocal: true,  // Flag indicating this came from local AI
+      });
+
+      // Log to dashboards for monitoring
+      io.to("device:dashboard").emit("ai:query-log", {
+        deviceId: device.deviceId,
+        deviceName: device.name,
+        speaker: speaker,
+        query: question,
+        response: response,
+        source: source,
+        latencyMs: latencyMs,
+        isLocal: true,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
     // Camera image streaming (JPEG over WebSocket for MVP)
     socket.on("camera:frame", (data) => {
       const device = deviceRegistry.get(socket.id);
