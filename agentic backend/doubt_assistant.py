@@ -15,6 +15,14 @@ from datetime import datetime
 from audio_module.trigger_detector import TriggerDetector, get_trigger_detector
 from audio_module.stt import SpeechToText, get_stt
 
+# Optional local Ollama import
+try:
+    from ai_module.local_ollama import LocalOllama, get_local_ollama
+    HAS_LOCAL_OLLAMA = True
+except ImportError:
+    HAS_LOCAL_OLLAMA = False
+    print("[DoubtAssistant] Local Ollama not available, will use supernode fallback")
+
 
 class DoubtAssistant:
     """
@@ -26,12 +34,13 @@ class DoubtAssistant:
     STATE_VIDEO_PLAYING = "VIDEO_PLAYING"
     STATE_DOUBT_MODE = "DOUBT_MODE"
 
-    def __init__(self, client, on_state_change=None, on_doubt_processed=None):
+    def __init__(self, client, local_ollama=None, on_state_change=None, on_doubt_processed=None):
         """
         Initialize Doubt Assistant.
 
         Args:
             client: ClassroomClient instance for socket communication
+            local_ollama: LocalOllama instance for local AI inference (optional)
             on_state_change: Callback when state changes (state, data)
             on_doubt_processed: Callback when doubt is sent to AI (doubt_text, speaker)
         """
@@ -39,6 +48,10 @@ class DoubtAssistant:
         self.state = self.STATE_VIDEO_PLAYING
         self.on_state_change = on_state_change
         self.on_doubt_processed = on_doubt_processed
+
+        # Local AI for doubt resolution
+        self.local_ollama = local_ollama
+        self._use_local_ai = local_ollama is not None
 
         # Trigger detection
         self.trigger_detector = get_trigger_detector()
@@ -220,34 +233,72 @@ class DoubtAssistant:
             "video_url": self.video_context.get("url"),
         }
 
-        # Send to AI via client
+        current_speaker = speaker or self._current_speaker or "Student"
+
+        # Always emit doubt:query for dashboard logging
         if self.client and self.client.is_connected():
-            # Emit doubt query with context
             self.client.sio.emit("doubt:query", {
                 "deviceId": self.client.device_id,
                 "question": question,
-                "speaker": speaker or self._current_speaker or "Student",
+                "speaker": current_speaker,
                 "context": context,
                 "timestamp": datetime.now().isoformat(),
             })
 
-            # Also use standard AI query with enhanced prompt
+        # Try local Ollama first (runs on classroom device)
+        if self._use_local_ai and self.local_ollama:
+            print(f"[DoubtAssistant] Using local Ollama for doubt resolution...")
+            result = self.local_ollama.generate(
+                prompt=question,
+                context=context,
+            )
+
+            if result.get("success"):
+                # Emit local AI response via socket (for classroom display)
+                if self.client and self.client.is_connected():
+                    self.client.emit_local_ai_response(
+                        response=result["response"],
+                        source=result.get("source", "local-ollama"),
+                        question=question,
+                        speaker=current_speaker,
+                        latency_ms=result.get("latency_ms", 0),
+                    )
+
+                # Callback
+                if self.on_doubt_processed:
+                    self.on_doubt_processed(question, current_speaker)
+
+                print(f"[DoubtAssistant] Local AI response ({result.get('latency_ms', 0)}ms): {result['response'][:100]}...")
+                return {
+                    "action": "doubt_processed_locally",
+                    "question": question,
+                    "response": result["response"],
+                    "source": "local-ollama",
+                    "speaker": current_speaker,
+                    "context": context,
+                }
+            else:
+                print(f"[DoubtAssistant] Local Ollama failed: {result.get('response')}, falling back to supernode")
+
+        # Fallback to supernode AI if local Ollama unavailable or failed
+        if self.client and self.client.is_connected():
+            print(f"[DoubtAssistant] Using supernode AI for doubt resolution...")
             enhanced_question = self._build_contextual_query(question, context)
             self.client.emit_ai_query(
                 text=enhanced_question,
-                speaker=speaker or self._current_speaker,
+                speaker=current_speaker,
                 context=context,
             )
 
         # Callback
         if self.on_doubt_processed:
-            self.on_doubt_processed(question, speaker or self._current_speaker)
+            self.on_doubt_processed(question, current_speaker)
 
-        print(f"[DoubtAssistant] Processing doubt: '{question}' from {speaker}")
+        print(f"[DoubtAssistant] Processing doubt: '{question}' from {current_speaker}")
         return {
             "action": "doubt_processed",
             "question": question,
-            "speaker": speaker or self._current_speaker,
+            "speaker": current_speaker,
             "context": context,
         }
 

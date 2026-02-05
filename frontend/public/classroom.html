@@ -454,6 +454,11 @@
     // Server URL - change this for production
     const SUPERNODE_URL = window.SUPERNODE_URL || 'http://localhost:5000';
 
+    // Local Ollama configuration (runs on the classroom device)
+    const OLLAMA_URL = window.OLLAMA_URL || 'http://localhost:11434';
+    const OLLAMA_MODEL = window.OLLAMA_MODEL || 'phi';
+    const OLLAMA_TIMEOUT = 30000; // 30 seconds
+
     // Get classroom name from URL params: ?name=Room101
     const urlParams = new URLSearchParams(window.location.search);
     const CLASSROOM_NAME = urlParams.get('name') || 'Classroom ' + Math.floor(Math.random() * 100);
@@ -479,6 +484,15 @@
     let cameraInterval = null;
     let isCameraStreaming = false;
 
+    // Doubt mode state
+    let isInDoubtMode = false;
+    let currentDoubtSpeaker = null;
+    let videoContext = {
+      title: null,
+      topic: null,
+      url: null,
+    };
+
     // =================== DOM ELEMENTS ===================
 
     const connectionDot = document.getElementById('connection-dot');
@@ -499,6 +513,7 @@
     const doubtSpeaker = document.getElementById('doubt-speaker');
     const doubtQuestion = document.getElementById('doubt-question');
     const doubtAnswer = document.getElementById('doubt-answer');
+    const doubtAnswerLabel = document.getElementById('doubt-answer-label');
 
     // =================== INITIALIZATION ===================
 
@@ -612,9 +627,16 @@
 
     function handleVideoPlay(data) {
       console.log('[Classroom] Video play command:', data.url);
-      const { url, autoPlay = true, volume = 1.0 } = data;
+      const { url, autoPlay = true, volume = 1.0, title, topic } = data;
 
       currentVideoUrl = url;
+
+      // Update video context for doubt resolution
+      videoContext = {
+        url: url,
+        title: title || null,
+        topic: topic || null,
+      };
 
       // Detect if YouTube URL
       if (isYouTubeUrl(url)) {
@@ -1019,10 +1041,122 @@
       emitVideoState('playing');
     }
 
+    // =================== LOCAL OLLAMA AI ===================
+
+    // System prompt for doubt resolution
+    const DOUBT_SYSTEM_PROMPT = `You are an AI Classroom Doubt Assistant integrated into a live classroom video system.
+
+Your role is to answer student doubts based on the currently playing educational video.
+
+Rules:
+- Keep answers simple, clear, and classroom-friendly
+- Use step-by-step explanations when needed
+- Stay within the context of the video topic if provided
+- Be concise - no emojis, no markdown formatting
+- If the doubt is unclear, ask ONE short clarifying question only
+- Do NOT introduce unrelated topics
+- Speak like a teacher helping during a live class
+
+If video context is provided, use it to give relevant answers.
+If no context is available, answer the question to the best of your ability.`;
+
+    // Query local Ollama for doubt resolution
+    async function queryLocalOllama(question, context = {}) {
+      const startTime = Date.now();
+
+      // Build prompt with context
+      let prompt = `SYSTEM: ${DOUBT_SYSTEM_PROMPT}\n\n`;
+
+      // Add video context if available
+      if (context.topic || context.title) {
+        prompt += 'Video Context:\n';
+        if (context.topic) prompt += `Current Topic: ${context.topic}\n`;
+        if (context.title) prompt += `Video: ${context.title}\n`;
+        prompt += '\n';
+      }
+
+      prompt += `USER: ${question}\n\nASSISTANT:`;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT);
+
+        const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: OLLAMA_MODEL,
+            prompt: prompt,
+            temperature: 0.4,
+            stream: false,
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`Ollama returned ${response.status}`);
+        }
+
+        const data = await response.json();
+        const latencyMs = Date.now() - startTime;
+
+        console.log(`[Classroom] Local Ollama response (${latencyMs}ms):`, data.response?.substring(0, 100));
+
+        return {
+          success: true,
+          response: data.response || 'I could not generate a response.',
+          source: 'local-ollama',
+          latencyMs: latencyMs,
+        };
+      } catch (error) {
+        const latencyMs = Date.now() - startTime;
+        console.error('[Classroom] Local Ollama error:', error.message);
+
+        if (error.name === 'AbortError') {
+          return {
+            success: false,
+            response: 'The AI is taking too long to respond. Please try again.',
+            source: 'local-ollama',
+            latencyMs: latencyMs,
+          };
+        }
+
+        return {
+          success: false,
+          response: `Could not connect to local AI. Please ensure Ollama is running. (${error.message})`,
+          source: 'local-ollama',
+          latencyMs: latencyMs,
+        };
+      }
+    }
+
+    // Log doubt session to dashboard via socket
+    function logDoubtToDashboard(question, response, speaker, latencyMs, source) {
+      if (socket && socket.connected) {
+        socket.emit('ai:local-response', {
+          deviceId: DEVICE_ID,
+          question: question,
+          response: response,
+          speaker: speaker || 'Student',
+          source: source,
+          latencyMs: latencyMs,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
     // =================== DOUBT MODE HANDLERS ===================
 
     function handleDoubtModeEntered(data) {
       console.log('[Classroom] Doubt mode entered:', data);
+
+      isInDoubtMode = true;
+      currentDoubtSpeaker = data.speaker || 'Student';
+
+      // Pause video
+      handleVideoPause({ reason: 'doubt_mode' });
 
       // Show doubt overlay
       doubtOverlay.classList.add('active');
@@ -1036,6 +1170,7 @@
 
       // Reset question and answer
       doubtQuestion.textContent = '';
+      doubtAnswerLabel.textContent = 'AI Assistant (Local)';
       doubtAnswer.innerHTML = `
         <div class="doubt-waiting">
           <span>Listening for your question</span>
@@ -1051,8 +1186,14 @@
     function handleDoubtModeExited(data) {
       console.log('[Classroom] Doubt mode exited');
 
+      isInDoubtMode = false;
+      currentDoubtSpeaker = null;
+
       // Hide doubt overlay
       doubtOverlay.classList.remove('active');
+
+      // Resume video
+      handleVideoResume({ reason: 'doubt_resolved' });
 
       // Clear content
       doubtSpeaker.textContent = '';
@@ -1060,15 +1201,18 @@
       doubtAnswer.innerHTML = '';
     }
 
-    function handleDoubtQuestion(data) {
+    async function handleDoubtQuestion(data) {
       console.log('[Classroom] Doubt question:', data.question);
 
+      const question = data.question;
+      const speaker = data.speaker || currentDoubtSpeaker || 'Student';
+
       // Display the question
-      doubtQuestion.textContent = `"${data.question}"`;
+      doubtQuestion.textContent = `"${question}"`;
 
       // Update speaker if provided
-      if (data.speaker) {
-        doubtSpeaker.textContent = `Question from: ${data.speaker}`;
+      if (speaker) {
+        doubtSpeaker.textContent = `Question from: ${speaker}`;
       }
 
       // Show loading state for answer
@@ -1082,14 +1226,76 @@
           </div>
         </div>
       `;
+
+      // Try local Ollama first
+      let result = await queryLocalOllama(question, videoContext);
+
+      // If local Ollama failed, fall back to supernode
+      if (!result.success) {
+        console.log('[Classroom] Local Ollama failed, falling back to supernode...');
+        doubtAnswer.innerHTML = `
+          <div class="doubt-waiting">
+            <span>Trying server AI</span>
+            <div class="dots">
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <div class="dot"></div>
+            </div>
+          </div>
+        `;
+
+        // Send to supernode and wait for response via socket
+        if (socket && socket.connected) {
+          socket.emit('ai:query', {
+            deviceId: DEVICE_ID,
+            queryId: Date.now().toString(),
+            text: question,
+            speaker: speaker,
+            context: videoContext,
+          });
+          // Response will come via handleAIResponse
+          return;
+        } else {
+          // No connection to supernode either
+          result = {
+            success: false,
+            response: 'Cannot connect to AI. Please check your connection.',
+            source: 'none',
+            latencyMs: 0,
+          };
+        }
+      }
+
+      // Display the response (for local Ollama success or complete failure)
+      if (doubtOverlay.classList.contains('active')) {
+        doubtAnswer.textContent = result.response;
+
+        // Update label to show source
+        if (result.success) {
+          doubtAnswerLabel.textContent = `AI Assistant (Local - ${result.latencyMs}ms)`;
+        } else {
+          doubtAnswerLabel.textContent = 'AI Assistant (Error)';
+        }
+      }
+
+      // Log to dashboard for teacher visibility
+      logDoubtToDashboard(question, result.response, speaker, result.latencyMs, result.source);
     }
 
     function handleAIResponse(data) {
-      console.log('[Classroom] AI response:', data.response?.substring(0, 100));
+      console.log('[Classroom] AI response from server:', data.response?.substring(0, 100));
 
-      // Only update if in doubt mode
+      // This handles responses from the supernode (fallback or direct)
+      // Update if in doubt mode - this covers the fallback case when local Ollama fails
       if (doubtOverlay.classList.contains('active')) {
+        // Skip if this is our own local response being echoed back
+        if (data.isLocal && data.fromDevice === DEVICE_ID) {
+          return;
+        }
+
         doubtAnswer.textContent = data.response || 'Sorry, I could not generate a response.';
+        const sourceLabel = data.isLocal ? 'Local' : (data.source || 'Server');
+        doubtAnswerLabel.textContent = `AI Assistant (${sourceLabel})`;
       }
     }
 
