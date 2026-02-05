@@ -28,12 +28,20 @@ def choose_speaker(faces):
     return face.get("name", "Unknown")
 
 
-def on_speech_segment(start, end):
+def on_speech_segment(start, end, audio_data=None):
+    """Called by VAD when a speech segment is detected.
+    Signature accepts optional audio_data to support downstream transcription.
+    """
     duration = (end - start).total_seconds()
     faces = fr.get_latest_faces()
     name = choose_speaker(faces)
     print(f"Detected speech by {name}: start={start.isoformat()} duration={duration:.2f}s")
     tdb.log_speech(name, start, duration)
+    # Optional: if audio_data is provided we could enqueue it for STT processing
+    # For now we accept it to avoid callback signature errors from VAD.
+    if audio_data is not None:
+        # keep minimal processing here; STT runs elsewhere in the system
+        pass
 
 
 if __name__ == "__main__":

@@ -3,3 +3,6 @@ data/
 .env
 .DS_Store
 .vscode/
+.vite/
+.claude/
+.github/

@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Classroom Display</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    /* Video players - fill screen */
+    #video-player,
+    #youtube-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #video-player {
+      object-fit: contain;
+      background: #000;
+    }
+
+    #youtube-container iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    /* Announcement overlay - covers everything during live stream */
+    #announcement-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.98);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 100;
+    }
+
+    #announcement-overlay.active {
+      display: flex;
+    }
+
+    #announcement-label {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #ef4444;
+      color: white;
+      padding: 8px 24px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 1rem;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    #announcement-video {
+      max-width: 90%;
+      max-height: 80%;
+      border-radius: 8px;
+      background: #111;
+    }
+
+    /* Status bar - top of screen */
+    #status-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 10px 20px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+      z-index: 50;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    #container:hover #status-bar {
+      opacity: 1;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ef4444;
+    }
+
+    .status-dot.online {
+      background: #22c55e;
+    }
+
+    /* Idle screen - shown when no content */
+    #idle-screen {
+      text-align: center;
+      z-index: 10;
+    }
+
+    #idle-screen h1 {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      font-weight: 300;
+    }
+
+    #idle-screen p {
+      font-size: 1.25rem;
+      color: #94a3b8;
+    }
+
+    #idle-screen .logo {
+      font-size: 5rem;
+      margin-bottom: 2rem;
+    }
+
+    /* Broadcast text banner */
+    #broadcast-banner {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #3b82f6;
+      color: white;
+      padding: 16px 40px;
+      border-radius: 8px;
+      font-size: 1.25rem;
+      font-weight: 500;
+      z-index: 75;
+      display: none;
+      max-width: 80%;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.5);
+    }
+
+    #broadcast-banner.show {
+      display: block;
+      animation: slideUp 0.3s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateX(-50%) translateY(20px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+      }
+    }
+
+    /* Hide elements */
+    .hidden {
+      display: none !important;
+    }
+
+    /* Emergency Alert Overlay */
+    #emergency-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 200;
+      animation: emergencyPulse 1s infinite;
+    }
+
+    #emergency-overlay.active {
+      display: flex;
+    }
+
+    @keyframes emergencyPulse {
+      0%, 100% { background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); }
+      50% { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); }
+    }
+
+    #emergency-icon {
+      font-size: 8rem;
+      margin-bottom: 2rem;
+      animation: shake 0.5s infinite;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-10px); }
+      75% { transform: translateX(10px); }
+    }
+
+    #emergency-title {
+      font-size: 4rem;
+      font-weight: 800;
+      margin-bottom: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+    }
+
+    #emergency-message {
+      font-size: 2.5rem;
+      font-weight: 600;
+      text-align: center;
+      max-width: 80%;
+      line-height: 1.4;
+    }
+
+    #emergency-from {
+      position: absolute;
+      bottom: 30px;
+      font-size: 1rem;
+      opacity: 0.8;
+    }
+
+    /* Doubt Mode Overlay */
+    #doubt-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 150;
+      padding: 40px;
+    }
+
+    #doubt-overlay.active {
+      display: flex;
+    }
+
+    #doubt-status-badge {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #8b5cf6;
+      color: white;
+      padding: 10px 30px;
+      border-radius: 25px;
+      font-weight: 600;
+      font-size: 1.1rem;
+      animation: doubtPulse 2s infinite;
+    }
+
+    @keyframes doubtPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.7); }
+      50% { box-shadow: 0 0 0 15px rgba(139, 92, 246, 0); }
+    }
+
+    #doubt-speaker {
+      font-size: 1.2rem;
+      color: #a78bfa;
+      margin-bottom: 10px;
+    }
+
+    #doubt-question {
+      font-size: 2rem;
+      font-weight: 600;
+      text-align: center;
+      max-width: 80%;
+      margin-bottom: 30px;
+      color: #fff;
+      line-height: 1.4;
+    }
+
+    #doubt-answer-container {
+      background: #1e1b4b;
+      border-radius: 16px;
+      padding: 30px 40px;
+      max-width: 85%;
+      max-height: 50vh;
+      overflow-y: auto;
+      border: 2px solid #4c1d95;
+    }
+
+    #doubt-answer-label {
+      font-size: 0.9rem;
+      color: #a78bfa;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    #doubt-answer {
+      font-size: 1.5rem;
+      line-height: 1.6;
+      color: #e0e7ff;
+    }
+
+    #doubt-hint {
+      position: absolute;
+      bottom: 30px;
+      font-size: 1rem;
+      color: #94a3b8;
+    }
+
+    #doubt-hint span {
+      color: #a78bfa;
+      font-weight: 600;
+    }
+
+    /* Doubt waiting animation */
+    .doubt-waiting {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #94a3b8;
+    }
+
+    .doubt-waiting .dots {
+      display: flex;
+      gap: 5px;
+    }
+
+    .doubt-waiting .dot {
+      width: 8px;
+      height: 8px;
+      background: #8b5cf6;
+      border-radius: 50%;
+      animation: dotBounce 1.4s infinite ease-in-out both;
+    }
+
+    .doubt-waiting .dot:nth-child(1) { animation-delay: -0.32s; }
+    .doubt-waiting .dot:nth-child(2) { animation-delay: -0.16s; }
+    .doubt-waiting .dot:nth-child(3) { animation-delay: 0; }
+
+    @keyframes dotBounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <!-- Status Bar (visible on hover) -->
+    <div id="status-bar">
+      <div class="status-indicator">
+        <span class="status-dot" id="connection-dot"></span>
+        <span id="connection-status">Connecting...</span>
+      </div>
+      <span id="classroom-name">Classroom</span>
+      <span id="current-time"></span>
+    </div>
+
+    <!-- Idle Screen (shown when no video) -->
+    <div id="idle-screen">
+      <div class="logo">📺</div>
+      <h1 id="display-name">Classroom Display</h1>
+      <p>Waiting for content...</p>
+    </div>
+
+    <!-- HTML5 Video Player -->
+    <video id="video-player" class="hidden" autoplay playsinline></video>
+
+    <!-- YouTube Player Container -->
+    <div id="youtube-container" class="hidden">
+      <div id="youtube-player"></div>
+    </div>
+
+    <!-- Announcement Overlay (WebRTC live stream) -->
+    <div id="announcement-overlay">
+      <div id="announcement-label">LIVE ANNOUNCEMENT</div>
+      <video id="announcement-video" autoplay playsinline></video>
+    </div>
+
+    <!-- Broadcast Text Banner -->
+    <div id="broadcast-banner"></div>
+
+    <!-- Emergency Alert Overlay -->
+    <div id="emergency-overlay">
+      <div id="emergency-icon">⚠️</div>
+      <div id="emergency-title">EMERGENCY</div>
+      <div id="emergency-message"></div>
+      <div id="emergency-from"></div>
+    </div>
+
+    <!-- Doubt Mode Overlay -->
+    <div id="doubt-overlay">
+      <div id="doubt-status-badge">DOUBT MODE</div>
+      <div id="doubt-speaker"></div>
+      <div id="doubt-question"></div>
+      <div id="doubt-answer-container">
+        <div id="doubt-answer-label">AI Assistant</div>
+        <div id="doubt-answer">
+          <div class="doubt-waiting">
+            <span>Waiting for your question</span>
+            <div class="dots">
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <div class="dot"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="doubt-hint">Say <span>"okay"</span> or <span>"understood"</span> to resume the video</div>
+    </div>
+  </div>
+
+  <!-- Socket.IO Client (CDN) -->
+  <script src="https://cdn.socket.io/4.8.0/socket.io.min.js"></script>
+
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+  <script>
+    // =================== CONFIGURATION ===================
+
+    // Server URL - change this for production
+    const SUPERNODE_URL = window.SUPERNODE_URL || 'http://localhost:5000';
+
+    // Get classroom name from URL params: ?name=Room101
+    const urlParams = new URLSearchParams(window.location.search);
+    const CLASSROOM_NAME = urlParams.get('name') || 'Classroom ' + Math.floor(Math.random() * 100);
+
+    // Generate unique device ID for this classroom instance
+    const DEVICE_ID = `classroom-${CLASSROOM_NAME.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString(36)}`;
+
+    // =================== STATE ===================
+
+    let socket = null;
+    let ytPlayer = null;
+    let ytReady = false;
+    let ytPendingVideoId = null;
+    let currentVideoUrl = null;
+    let currentVideoTime = 0;
+    let peerConnection = null;
+    let announcementSessionId = null;
+
+    // Camera streaming state
+    let cameraStream = null;
+    let cameraCanvas = null;
+    let cameraContext = null;
+    let cameraInterval = null;
+    let isCameraStreaming = false;
+
+    // =================== DOM ELEMENTS ===================
+
+    const connectionDot = document.getElementById('connection-dot');
+    const connectionStatus = document.getElementById('connection-status');
+    const classroomNameEl = document.getElementById('classroom-name');
+    const displayNameEl = document.getElementById('display-name');
+    const currentTimeEl = document.getElementById('current-time');
+    const idleScreen = document.getElementById('idle-screen');
+    const videoPlayer = document.getElementById('video-player');
+    const youtubeContainer = document.getElementById('youtube-container');
+    const announcementOverlay = document.getElementById('announcement-overlay');
+    const announcementVideo = document.getElementById('announcement-video');
+    const broadcastBanner = document.getElementById('broadcast-banner');
+    const emergencyOverlay = document.getElementById('emergency-overlay');
+    const emergencyMessage = document.getElementById('emergency-message');
+    const emergencyFrom = document.getElementById('emergency-from');
+    const doubtOverlay = document.getElementById('doubt-overlay');
+    const doubtSpeaker = document.getElementById('doubt-speaker');
+    const doubtQuestion = document.getElementById('doubt-question');
+    const doubtAnswer = document.getElementById('doubt-answer');
+
+    // =================== INITIALIZATION ===================
+
+    // Set classroom name in UI
+    classroomNameEl.textContent = CLASSROOM_NAME;
+    displayNameEl.textContent = CLASSROOM_NAME;
+    document.title = `${CLASSROOM_NAME} - Display`;
+
+    // Update clock every second
+    function updateTime() {
+      const now = new Date();
+      currentTimeEl.textContent = now.toLocaleTimeString();
+    }
+    updateTime();
+    setInterval(updateTime, 1000);
+
+    // =================== SOCKET.IO CONNECTION ===================
+
+    function connectSocket() {
+      console.log(`[Classroom] Connecting to ${SUPERNODE_URL}...`);
+
+      socket = io(SUPERNODE_URL, {
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+      });
+
+      // Connection established
+      socket.on('connect', () => {
+        console.log('[Classroom] Connected to Supernode');
+        connectionDot.classList.add('online');
+        connectionStatus.textContent = 'Connected';
+
+        // Register as classroom device
+        socket.emit('device:register', {
+          deviceId: DEVICE_ID,
+          type: 'classroom',
+          name: CLASSROOM_NAME,
+          capabilities: ['display', 'video', 'webrtc'],
+        });
+      });
+
+      // Connection lost
+      socket.on('disconnect', (reason) => {
+        console.log('[Classroom] Disconnected:', reason);
+        connectionDot.classList.remove('online');
+        connectionStatus.textContent = 'Disconnected';
+      });
+
+      // Registration confirmed
+      socket.on('device:registered', (data) => {
+        if (data.success) {
+          console.log('[Classroom] Registered successfully');
+
+          // Start heartbeat to keep connection alive
+          setInterval(() => {
+            socket.emit('device:heartbeat', {
+              deviceId: DEVICE_ID,
+              status: 'healthy',
+              metrics: {
+                currentVideo: currentVideoUrl,
+                isPlaying: !videoPlayer.paused || (ytPlayer && ytPlayer.getPlayerState?.() === 1),
+              },
+            });
+          }, 30000);
+        }
+      });
+
+      // =================== VIDEO CONTROL HANDLERS ===================
+
+      socket.on('video:play', handleVideoPlay);
+      socket.on('video:stop', handleVideoStop);
+
+      // =================== ANNOUNCEMENT HANDLERS ===================
+
+      socket.on('announcement:start', handleAnnouncementStart);
+      socket.on('announcement:end', handleAnnouncementEnd);
+
+      // =================== WEBRTC SIGNALING ===================
+
+      socket.on('webrtc:offer', handleWebRTCOffer);
+      socket.on('webrtc:ice-candidate', handleICECandidate);
+
+      // =================== BROADCAST TEXT MESSAGES ===================
+
+      socket.on('broadcast:message', handleBroadcastMessage);
+
+      // =================== EMERGENCY ALERTS ===================
+
+      socket.on('emergency:alert', handleEmergencyAlert);
+
+      // =================== VIDEO PAUSE/RESUME (DOUBT MODE) ===================
+
+      socket.on('video:pause', handleVideoPause);
+      socket.on('video:resume', handleVideoResume);
+
+      // =================== DOUBT MODE EVENTS ===================
+
+      socket.on('doubt:mode-entered', handleDoubtModeEntered);
+      socket.on('doubt:mode-exited', handleDoubtModeExited);
+      socket.on('doubt:question', handleDoubtQuestion);
+      socket.on('ai:response', handleAIResponse);
+
+      // =================== CONTROL COMMANDS ===================
+
+      socket.on('control:command', handleControlCommand);
+    }
+
+    // =================== VIDEO PLAYBACK ===================
+
+    function handleVideoPlay(data) {
+      console.log('[Classroom] Video play command:', data.url);
+      const { url, autoPlay = true, volume = 1.0 } = data;
+
+      currentVideoUrl = url;
+
+      // Detect if YouTube URL
+      if (isYouTubeUrl(url)) {
+        playYouTube(url, autoPlay);
+      } else {
+        playHTML5Video(url, autoPlay, volume);
+      }
+
+      // Acknowledge to server
+      emitVideoState('playing', url);
+    }
+
+    function handleVideoStop(data) {
+      console.log('[Classroom] Video stop command');
+      stopAllVideos();
+      currentVideoUrl = null;
+      currentVideoTime = 0;
+      showIdleScreen();
+      emitVideoState('stopped');
+    }
+
+    // Check if URL is YouTube
+    function isYouTubeUrl(url) {
+      return url.includes('youtube.com') || url.includes('youtu.be');
+    }
+
+    // Extract YouTube video ID from various URL formats
+    function extractYouTubeId(url) {
+      const patterns = [
+        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+        /youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/,
+      ];
+
+      for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match) return match[1];
+      }
+      return null;
+    }
+
+    // Play YouTube video
+    function playYouTube(url, autoPlay) {
+      const videoId = extractYouTubeId(url);
+      if (!videoId) {
+        console.error('[Classroom] Invalid YouTube URL:', url);
+        return;
+      }
+
+      hideAllPlayers();
+      youtubeContainer.classList.remove('hidden');
+
+      if (ytReady && ytPlayer && ytPlayer.loadVideoById) {
+        // Player already initialized - load new video
+        ytPlayer.loadVideoById(videoId);
+        if (autoPlay) ytPlayer.playVideo();
+      } else {
+        // Store video ID to play when player is ready
+        ytPendingVideoId = videoId;
+
+        // If YT API is loaded but player not created yet
+        if (window.YT && window.YT.Player && !ytPlayer) {
+          createYouTubePlayer(videoId, autoPlay);
+        }
+        // Otherwise, onYouTubeIframeAPIReady will handle it
+      }
+    }
+
+    // Create YouTube player instance
+    function createYouTubePlayer(videoId, autoPlay) {
+      ytPlayer = new YT.Player('youtube-player', {
+        width: '100%',
+        height: '100%',
+        videoId: videoId,
+        playerVars: {
+          autoplay: autoPlay ? 1 : 0,
+          controls: 0,           // Hide controls for clean display
+          rel: 0,               // Don't show related videos
+          modestbranding: 1,    // Minimal YouTube branding
+          fs: 0,                // Disable fullscreen button
+          iv_load_policy: 3,    // Hide annotations
+          playsinline: 1,       // Play inline on mobile
+        },
+        events: {
+          onReady: (event) => {
+            ytReady = true;
+            console.log('[Classroom] YouTube player ready');
+            if (autoPlay) event.target.playVideo();
+          },
+          onStateChange: (event) => {
+            if (event.data === YT.PlayerState.ENDED) {
+              emitVideoState('ended');
+            } else if (event.data === YT.PlayerState.PLAYING) {
+              emitVideoState('playing');
+            } else if (event.data === YT.PlayerState.PAUSED) {
+              emitVideoState('paused');
+            }
+          },
+          onError: (event) => {
+            console.error('[Classroom] YouTube error:', event.data);
+            emitVideoState('error');
+          },
+        },
+      });
+    }
+
+    // YouTube API ready callback
+    window.onYouTubeIframeAPIReady = function() {
+      console.log('[Classroom] YouTube API ready');
+      ytReady = true;
+
+      // If we have a pending video, play it now
+      if (ytPendingVideoId) {
+        createYouTubePlayer(ytPendingVideoId, true);
+        ytPendingVideoId = null;
+      }
+    };
+
+    // Play HTML5 video (MP4, WebM, etc.)
+    function playHTML5Video(url, autoPlay, volume) {
+      hideAllPlayers();
+      videoPlayer.classList.remove('hidden');
+
+      videoPlayer.src = url;
+      videoPlayer.volume = volume;
+
+      if (autoPlay) {
+        // Try to autoplay (may be blocked by browser)
+        videoPlayer.play().catch(err => {
+          console.warn('[Classroom] Autoplay blocked:', err.message);
+          // Show play button or retry with muted
+          videoPlayer.muted = true;
+          videoPlayer.play().catch(() => {});
+        });
+      }
+    }
+
+    // Video event listeners
+    videoPlayer.addEventListener('ended', () => emitVideoState('ended'));
+    videoPlayer.addEventListener('playing', () => emitVideoState('playing'));
+    videoPlayer.addEventListener('pause', () => emitVideoState('paused'));
+    videoPlayer.addEventListener('error', () => emitVideoState('error'));
+    videoPlayer.addEventListener('timeupdate', () => {
+      currentVideoTime = videoPlayer.currentTime;
+    });
+
+    // Stop all video playback
+    function stopAllVideos() {
+      // Stop HTML5 video
+      videoPlayer.pause();
+      videoPlayer.src = '';
+      videoPlayer.classList.add('hidden');
+
+      // Stop YouTube
+      if (ytPlayer && ytPlayer.stopVideo) {
+        ytPlayer.stopVideo();
+      }
+      youtubeContainer.classList.add('hidden');
+    }
+
+    // Pause videos (for announcement)
+    function pauseForAnnouncement() {
+      // Save current position
+      if (!videoPlayer.paused) {
+        currentVideoTime = videoPlayer.currentTime;
+      } else if (ytPlayer && ytPlayer.getCurrentTime) {
+        currentVideoTime = ytPlayer.getCurrentTime();
+      }
+
+      videoPlayer.pause();
+      if (ytPlayer && ytPlayer.pauseVideo) {
+        ytPlayer.pauseVideo();
+      }
+    }
+
+    // Resume video after announcement
+    function resumeVideo(url) {
+      if (!url) {
+        showIdleScreen();
+        return;
+      }
+
+      console.log('[Classroom] Resuming video:', url);
+      currentVideoUrl = url;
+
+      if (isYouTubeUrl(url)) {
+        youtubeContainer.classList.remove('hidden');
+        if (ytPlayer && ytPlayer.playVideo) {
+          // Seek to saved position if available
+          if (currentVideoTime > 0 && ytPlayer.seekTo) {
+            ytPlayer.seekTo(currentVideoTime, true);
+          }
+          ytPlayer.playVideo();
+        }
+      } else {
+        videoPlayer.classList.remove('hidden');
+        if (currentVideoTime > 0) {
+          videoPlayer.currentTime = currentVideoTime;
+        }
+        videoPlayer.play().catch(() => {});
+      }
+
+      announcementOverlay.classList.remove('active');
+      emitVideoState('playing', url);
+    }
+
+    // UI helpers
+    function hideAllPlayers() {
+      idleScreen.classList.add('hidden');
+      videoPlayer.classList.add('hidden');
+      youtubeContainer.classList.add('hidden');
+    }
+
+    function showIdleScreen() {
+      hideAllPlayers();
+      idleScreen.classList.remove('hidden');
+    }
+
+    // Emit video state to server
+    function emitVideoState(state, url) {
+      if (socket && socket.connected) {
+        socket.emit('video:state-changed', {
+          state,
+          url: url || currentVideoUrl,
+          currentTime: currentVideoTime,
+        });
+      }
+    }
+
+    // =================== WEBRTC ANNOUNCEMENT ===================
+
+    function handleAnnouncementStart(data) {
+      console.log('[Classroom] Announcement starting:', data);
+      announcementSessionId = data.sessionId;
+
+      // Pause current video (don't stop - we'll resume)
+      pauseForAnnouncement();
+
+      // Show announcement overlay
+      announcementOverlay.classList.add('active');
+
+      // Create WebRTC peer connection (receive-only)
+      createPeerConnection();
+
+      // Signal to server that we're ready
+      socket.emit('announcement:ready', {
+        sessionId: data.sessionId,
+        deviceId: DEVICE_ID,
+      });
+    }
+
+    function handleAnnouncementEnd(data) {
+      console.log('[Classroom] Announcement ending:', data);
+
+      // Close WebRTC connection
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+      }
+
+      // Clear announcement video
+      announcementVideo.srcObject = null;
+      announcementOverlay.classList.remove('active');
+
+      // Resume previous video if specified
+      if (data.resumeVideo && data.resumeUrl) {
+        resumeVideo(data.resumeUrl);
+      } else {
+        showIdleScreen();
+      }
+
+      announcementSessionId = null;
+    }
+
+    // Create WebRTC peer connection (receive-only)
+    function createPeerConnection() {
+      const config = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+        ],
+      };
+
+      peerConnection = new RTCPeerConnection(config);
+
+      // Handle incoming media tracks
+      peerConnection.ontrack = (event) => {
+        console.log('[Classroom] Received media track:', event.track.kind);
+        if (event.streams && event.streams[0]) {
+          announcementVideo.srcObject = event.streams[0];
+        }
+      };
+
+      // Send ICE candidates to server
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit('webrtc:ice-candidate', {
+            to: 'dashboard',
+            candidate: event.candidate,
+          });
+        }
+      };
+
+      // Connection state logging
+      peerConnection.onconnectionstatechange = () => {
+        console.log('[Classroom] WebRTC connection state:', peerConnection.connectionState);
+      };
+
+      peerConnection.oniceconnectionstatechange = () => {
+        console.log('[Classroom] ICE connection state:', peerConnection.iceConnectionState);
+      };
+    }
+
+    // Handle WebRTC offer from dashboard
+    async function handleWebRTCOffer(data) {
+      console.log('[Classroom] Received WebRTC offer from:', data.from);
+
+      if (!peerConnection) {
+        createPeerConnection();
+      }
+
+      try {
+        // Set remote description (the offer)
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+
+        // Create and set local description (the answer)
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        // Send answer back to dashboard
+        socket.emit('webrtc:answer', {
+          to: data.from,
+          sdp: answer,
+        });
+
+        console.log('[Classroom] Sent WebRTC answer');
+      } catch (error) {
+        console.error('[Classroom] WebRTC offer handling error:', error);
+      }
+    }
+
+    // Handle ICE candidate from dashboard
+    function handleICECandidate(data) {
+      if (peerConnection && data.candidate) {
+        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
+          .catch(err => console.error('[Classroom] ICE candidate error:', err));
+      }
+    }
+
+    // =================== BROADCAST TEXT MESSAGES ===================
+
+    function handleBroadcastMessage(data) {
+      console.log('[Classroom] Broadcast message:', data.content);
+
+      broadcastBanner.textContent = data.content;
+      broadcastBanner.classList.add('show');
+
+      // Hide after duration
+      const duration = (data.displayDuration || 30) * 1000;
+      setTimeout(() => {
+        broadcastBanner.classList.remove('show');
+      }, duration);
+    }
+
+    // =================== VIDEO PAUSE/RESUME (DOUBT MODE) ===================
+
+    function handleVideoPause(data) {
+      console.log('[Classroom] Video pause command:', data.reason);
+
+      // Save current position before pausing
+      if (!videoPlayer.paused) {
+        currentVideoTime = videoPlayer.currentTime;
+        videoPlayer.pause();
+      }
+      if (ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState() === 1) {
+        currentVideoTime = ytPlayer.getCurrentTime();
+        ytPlayer.pauseVideo();
+      }
+
+      emitVideoState('paused');
+    }
+
+    function handleVideoResume(data) {
+      console.log('[Classroom] Video resume command:', data.reason);
+
+      // Resume HTML5 video
+      if (videoPlayer.src && !videoPlayer.classList.contains('hidden')) {
+        if (currentVideoTime > 0) {
+          videoPlayer.currentTime = currentVideoTime;
+        }
+        videoPlayer.play().catch(() => {});
+      }
+
+      // Resume YouTube video
+      if (ytPlayer && ytPlayer.playVideo && !youtubeContainer.classList.contains('hidden')) {
+        if (currentVideoTime > 0 && ytPlayer.seekTo) {
+          ytPlayer.seekTo(currentVideoTime, true);
+        }
+        ytPlayer.playVideo();
+      }
+
+      emitVideoState('playing');
+    }
+
+    // =================== DOUBT MODE HANDLERS ===================
+
+    function handleDoubtModeEntered(data) {
+      console.log('[Classroom] Doubt mode entered:', data);
+
+      // Show doubt overlay
+      doubtOverlay.classList.add('active');
+
+      // Set speaker name
+      if (data.speaker) {
+        doubtSpeaker.textContent = `Question from: ${data.speaker}`;
+      } else {
+        doubtSpeaker.textContent = '';
+      }
+
+      // Reset question and answer
+      doubtQuestion.textContent = '';
+      doubtAnswer.innerHTML = `
+        <div class="doubt-waiting">
+          <span>Listening for your question</span>
+          <div class="dots">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function handleDoubtModeExited(data) {
+      console.log('[Classroom] Doubt mode exited');
+
+      // Hide doubt overlay
+      doubtOverlay.classList.remove('active');
+
+      // Clear content
+      doubtSpeaker.textContent = '';
+      doubtQuestion.textContent = '';
+      doubtAnswer.innerHTML = '';
+    }
+
+    function handleDoubtQuestion(data) {
+      console.log('[Classroom] Doubt question:', data.question);
+
+      // Display the question
+      doubtQuestion.textContent = `"${data.question}"`;
+
+      // Update speaker if provided
+      if (data.speaker) {
+        doubtSpeaker.textContent = `Question from: ${data.speaker}`;
+      }
+
+      // Show loading state for answer
+      doubtAnswer.innerHTML = `
+        <div class="doubt-waiting">
+          <span>Thinking</span>
+          <div class="dots">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function handleAIResponse(data) {
+      console.log('[Classroom] AI response:', data.response?.substring(0, 100));
+
+      // Only update if in doubt mode
+      if (doubtOverlay.classList.contains('active')) {
+        doubtAnswer.textContent = data.response || 'Sorry, I could not generate a response.';
+      }
+    }
+
+    // =================== EMERGENCY ALERTS ===================
+
+    function handleEmergencyAlert(data) {
+      console.log('[Classroom] EMERGENCY ALERT:', data.message);
+
+      // Pause any playing video
+      pauseForAnnouncement();
+
+      // Show emergency overlay
+      emergencyMessage.textContent = data.message;
+      emergencyFrom.textContent = `From: ${data.from || 'Admin'} - ${new Date().toLocaleTimeString()}`;
+      emergencyOverlay.classList.add('active');
+
+      // Play alert sound (optional - uncomment if you want audio alert)
+      // playAlertSound();
+
+      // Auto-hide after 60 seconds (but can be dismissed by another command)
+      setTimeout(() => {
+        emergencyOverlay.classList.remove('active');
+        // Resume video if there was one playing
+        if (currentVideoUrl) {
+          resumeVideo(currentVideoUrl);
+        }
+      }, 60000);
+    }
+
+    // =================== CONTROL COMMANDS ===================
+
+    function handleControlCommand(data) {
+      const { action, params, commandId } = data;
+      console.log('[Classroom] Control command:', action, params);
+
+      let result = null;
+      let error = null;
+
+      try {
+        switch (action) {
+          case 'start-camera':
+            startCameraStreaming();
+            result = { camera: 'starting' };
+            break;
+
+          case 'stop-camera':
+            stopCameraStreaming();
+            result = { camera: 'stopped' };
+            break;
+
+          case 'ping':
+            result = { pong: true, timestamp: new Date().toISOString() };
+            break;
+
+          case 'status':
+            result = {
+              deviceId: DEVICE_ID,
+              cameraStreaming: isCameraStreaming,
+              videoPlaying: currentVideoUrl ? true : false,
+              currentVideo: currentVideoUrl,
+            };
+            break;
+
+          default:
+            result = { handled: false, action };
+        }
+      } catch (e) {
+        error = e.message;
+      }
+
+      // Send acknowledgment
+      socket.emit('control:ack', {
+        commandId,
+        success: error === null,
+        error,
+        result,
+      });
+    }
+
+    // =================== CAMERA STREAMING ===================
+
+    async function startCameraStreaming() {
+      if (isCameraStreaming) {
+        console.log('[Classroom] Camera already streaming');
+        return;
+      }
+
+      try {
+        // Request camera access
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: 'user'
+          },
+          audio: false
+        });
+
+        // Create canvas for frame capture
+        cameraCanvas = document.createElement('canvas');
+        cameraCanvas.width = 640;
+        cameraCanvas.height = 480;
+        cameraContext = cameraCanvas.getContext('2d');
+
+        // Create video element to draw from
+        const tempVideo = document.createElement('video');
+        tempVideo.srcObject = cameraStream;
+        tempVideo.play();
+
+        isCameraStreaming = true;
+        console.log('[Classroom] Camera started');
+
+        // Stream frames every 100ms (10 FPS)
+        cameraInterval = setInterval(() => {
+          if (!isCameraStreaming || !cameraStream) {
+            stopCameraStreaming();
+            return;
+          }
+
+          // Draw current frame to canvas
+          cameraContext.drawImage(tempVideo, 0, 0, cameraCanvas.width, cameraCanvas.height);
+
+          // Convert to JPEG base64
+          const frameData = cameraCanvas.toDataURL('image/jpeg', 0.6);
+          const base64Data = frameData.split(',')[1];
+
+          // Send to server
+          socket.emit('camera:frame', {
+            deviceId: DEVICE_ID,
+            frame: base64Data,
+            timestamp: new Date().toISOString(),
+          });
+        }, 100);
+
+      } catch (error) {
+        console.error('[Classroom] Camera access denied:', error);
+        isCameraStreaming = false;
+      }
+    }
+
+    function stopCameraStreaming() {
+      if (cameraInterval) {
+        clearInterval(cameraInterval);
+        cameraInterval = null;
+      }
+
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+      }
+
+      isCameraStreaming = false;
+      console.log('[Classroom] Camera stopped');
+    }
+
+    // =================== START ===================
+
+    // Connect to server when page loads
+    connectSocket();
+
+    // Log device info
+    console.log('[Classroom] Device ID:', DEVICE_ID);
+    console.log('[Classroom] Name:', CLASSROOM_NAME);
+    console.log('[Classroom] Server:', SUPERNODE_URL);
+  </script>
+</body>
+</html>

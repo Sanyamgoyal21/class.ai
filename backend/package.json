@@ -1,21 +1,12 @@
 {
-  "name": "ollama-backend",
   "type": "module",
-  "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
-  },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "cors": "^2.8.6",
-    "express": "^4.22.1",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
     "node-fetch": "^3.3.2",
     "nodemon": "^3.1.11",
     "socket.io": "^4.7.5"
-  },
-  "version": "1.0.0",
-  "main": "index.js",
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": ""
+  }
 }
