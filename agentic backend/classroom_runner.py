@@ -24,6 +24,11 @@ except ImportError as e:
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import warnings
+# Suppress setuptools' pkg_resources deprecation warning originating from
+# third-party packages (e.g. face_recognition_models) until upstream is fixed.
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated as an API.*", category=UserWarning)
+
 # Optional imports with availability flags
 HAS_FACE_RECOGNITION = False
 HAS_VAD = False
