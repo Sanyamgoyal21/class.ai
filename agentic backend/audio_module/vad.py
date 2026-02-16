@@ -4,6 +4,14 @@ import webrtcvad
 import pyaudio
 from datetime import datetime
 
+# Optional AEC import
+try:
+    from audio_module.aec import AcousticEchoCanceller, LoopbackCapture, get_aec, get_loopback_capture
+    HAS_AEC = True
+except ImportError:
+    HAS_AEC = False
+    print("[VAD] AEC module not available, echo cancellation disabled")
+
 
 class VADDetector(threading.Thread):
     """
@@ -13,9 +21,12 @@ class VADDetector(threading.Thread):
     - start_time: datetime when speech started
     - end_time: datetime when speech ended
     - audio_data: bytes containing the recorded audio (16-bit PCM, mono, 16kHz)
+
+    Supports Acoustic Echo Cancellation (AEC) to filter out speaker audio
+    from the microphone input, ensuring only external sounds are detected.
     """
 
-    def __init__(self, on_segment, aggressiveness=2, rate=16000, frame_duration=20, buffer_audio=True):
+    def __init__(self, on_segment, aggressiveness=2, rate=16000, frame_duration=20, buffer_audio=True, enable_aec=True):
         super().__init__(daemon=True)
         self.vad = webrtcvad.Vad(aggressiveness)
         self.rate = rate
@@ -28,6 +39,20 @@ class VADDetector(threading.Thread):
         self.buffer_audio = buffer_audio  # Whether to capture audio for STT
         self._audio_buffer = []  # Buffer for capturing audio frames
 
+        # Acoustic Echo Cancellation
+        self.enable_aec = enable_aec and HAS_AEC
+        self._aec = None
+        self._loopback = None
+
+        if self.enable_aec:
+            try:
+                self._aec = get_aec(rate, self.frame_size)
+                self._loopback = get_loopback_capture(rate, self.frame_size)
+                print("[VAD] AEC enabled - will filter out speaker audio")
+            except Exception as e:
+                print(f"[VAD] Failed to initialize AEC: {e}")
+                self.enable_aec = False
+
     def run(self):
         try:
             stream = self.audio.open(format=pyaudio.paInt16,
@@ -39,6 +64,15 @@ class VADDetector(threading.Thread):
             print("Failed to open audio stream:", e)
             return
 
+        # Start loopback capture for AEC if enabled
+        if self.enable_aec and self._loopback:
+            try:
+                self._loopback.start()
+                print("[VAD] Loopback capture started for AEC")
+            except Exception as e:
+                print(f"[VAD] Failed to start loopback: {e}")
+                self.enable_aec = False
+
         self.running = True
         in_speech = False
         speech_start = None
@@ -46,10 +80,17 @@ class VADDetector(threading.Thread):
         speech_count = 0
         self._audio_buffer = []
 
-        print("VAD listening...")
+        print("VAD listening..." + (" (with AEC)" if self.enable_aec else ""))
         try:
             while self.running:
                 data = stream.read(self.frame_size, exception_on_overflow=False)
+
+                # Apply Acoustic Echo Cancellation if enabled
+                if self.enable_aec and self._aec and self._loopback:
+                    loopback_frame = self._loopback.get_current_frame()
+                    if loopback_frame:
+                        data = self._aec.process(data, loopback_frame)
+
                 is_speech = self.vad.is_speech(data, self.rate)
 
                 if is_speech:
@@ -82,6 +123,10 @@ class VADDetector(threading.Thread):
                         speech_start = None
 
         finally:
+            # Stop loopback capture
+            if self._loopback and self._loopback.running:
+                self._loopback.stop()
+                self._loopback.join(timeout=1)
             stream.stop_stream()
             stream.close()
             self.audio.terminate()

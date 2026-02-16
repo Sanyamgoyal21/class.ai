@@ -484,6 +484,13 @@
     let cameraInterval = null;
     let isCameraStreaming = false;
 
+    // Display/Screen streaming state
+    let displayStream = null;
+    let displayCanvas = null;
+    let displayContext = null;
+    let displayInterval = null;
+    let isDisplayStreaming = false;
+
     // Doubt mode state
     let isInDoubtMode = false;
     let currentDoubtSpeaker = null;
@@ -605,6 +612,7 @@
       // =================== EMERGENCY ALERTS ===================
 
       socket.on('emergency:alert', handleEmergencyAlert);
+      socket.on('emergency:stop', handleEmergencyStop);
 
       // =================== VIDEO PAUSE/RESUME (DOUBT MODE) ===================
 
@@ -1325,6 +1333,18 @@ If no context is available, answer the question to the best of your ability.`;
       }, 60000);
     }
 
+    function handleEmergencyStop(data) {
+      console.log('[Classroom] Emergency alert stopped');
+
+      // Hide emergency overlay
+      emergencyOverlay.classList.remove('active');
+
+      // Resume video if there was one playing
+      if (currentVideoUrl) {
+        resumeVideo(currentVideoUrl);
+      }
+    }
+
     // =================== CONTROL COMMANDS ===================
 
     function handleControlCommand(data) {
@@ -1346,6 +1366,16 @@ If no context is available, answer the question to the best of your ability.`;
             result = { camera: 'stopped' };
             break;
 
+          case 'start-display':
+            startDisplayStreaming();
+            result = { display: 'starting' };
+            break;
+
+          case 'stop-display':
+            stopDisplayStreaming();
+            result = { display: 'stopped' };
+            break;
+
           case 'ping':
             result = { pong: true, timestamp: new Date().toISOString() };
             break;
@@ -1354,6 +1384,7 @@ If no context is available, answer the question to the best of your ability.`;
             result = {
               deviceId: DEVICE_ID,
               cameraStreaming: isCameraStreaming,
+              displayStreaming: isDisplayStreaming,
               videoPlaying: currentVideoUrl ? true : false,
               currentVideo: currentVideoUrl,
             };
@@ -1449,6 +1480,88 @@ If no context is available, answer the question to the best of your ability.`;
 
       isCameraStreaming = false;
       console.log('[Classroom] Camera stopped');
+    }
+
+    // =================== DISPLAY/SCREEN STREAMING ===================
+
+    async function startDisplayStreaming() {
+      if (isDisplayStreaming) {
+        console.log('[Classroom] Display already streaming');
+        return;
+      }
+
+      try {
+        // Request screen capture access
+        displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            cursor: 'always',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+
+        // Handle when user stops sharing via browser UI
+        displayStream.getVideoTracks()[0].onended = () => {
+          console.log('[Classroom] Display sharing stopped by user');
+          stopDisplayStreaming();
+        };
+
+        // Create canvas for frame capture
+        displayCanvas = document.createElement('canvas');
+        displayCanvas.width = 1280;
+        displayCanvas.height = 720;
+        displayContext = displayCanvas.getContext('2d');
+
+        // Create video element to draw from
+        const tempVideo = document.createElement('video');
+        tempVideo.srcObject = displayStream;
+        await tempVideo.play();
+
+        isDisplayStreaming = true;
+        console.log('[Classroom] Display streaming started');
+
+        // Stream frames every 1000ms (1 FPS for bandwidth)
+        displayInterval = setInterval(() => {
+          if (!isDisplayStreaming || !displayStream) {
+            stopDisplayStreaming();
+            return;
+          }
+
+          // Draw current frame to canvas
+          displayContext.drawImage(tempVideo, 0, 0, displayCanvas.width, displayCanvas.height);
+
+          // Convert to JPEG base64
+          const frameData = displayCanvas.toDataURL('image/jpeg', 0.6);
+          const base64Data = frameData.split(',')[1];
+
+          // Send to server
+          socket.emit('display:frame', {
+            deviceId: DEVICE_ID,
+            frame: base64Data,
+            timestamp: new Date().toISOString(),
+          });
+        }, 1000);
+
+      } catch (error) {
+        console.error('[Classroom] Display access denied:', error);
+        isDisplayStreaming = false;
+      }
+    }
+
+    function stopDisplayStreaming() {
+      if (displayInterval) {
+        clearInterval(displayInterval);
+        displayInterval = null;
+      }
+
+      if (displayStream) {
+        displayStream.getTracks().forEach(track => track.stop());
+        displayStream = null;
+      }
+
+      isDisplayStreaming = false;
+      console.log('[Classroom] Display streaming stopped');
     }
 
     // =================== START ===================

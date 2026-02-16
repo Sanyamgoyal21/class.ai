@@ -8,9 +8,12 @@ function CameraMonitor() {
   const [connected, setConnected] = useState(false)
   const [socket, setSocket] = useState(null)
   const [cameraFeeds, setCameraFeeds] = useState({})
+  const [displayFeeds, setDisplayFeeds] = useState({})
   const [activeStreams, setActiveStreams] = useState(new Set())
+  const [activeDisplayStreams, setActiveDisplayStreams] = useState(new Set())
   const [selectedView, setSelectedView] = useState('grid') // 'grid' or 'single'
   const [focusedDevice, setFocusedDevice] = useState(null)
+  const [showDisplay, setShowDisplay] = useState(true) // Toggle display stream visibility
 
   // Initialize socket connection
   useEffect(() => {
@@ -70,6 +73,19 @@ function CameraMonitor() {
       setActiveStreams(prev => new Set([...prev, data.deviceId]))
     })
 
+    // Receive display/screen frames
+    s.on('display:frame', (data) => {
+      setDisplayFeeds(prev => ({
+        ...prev,
+        [data.deviceId]: {
+          frame: `data:image/jpeg;base64,${data.frame}`,
+          timestamp: data.timestamp,
+          lastUpdate: Date.now(),
+        },
+      }))
+      setActiveDisplayStreams(prev => new Set([...prev, data.deviceId]))
+    })
+
     // Control command acknowledgments
     s.on('control:ack', (data) => {
       console.log('Control ack:', data)
@@ -84,11 +100,26 @@ function CameraMonitor() {
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now()
+      // Clear stale camera feeds
       setCameraFeeds(prev => {
         const updated = { ...prev }
         for (const [deviceId, feed] of Object.entries(updated)) {
           if (now - feed.lastUpdate > 5000) {
             setActiveStreams(prev => {
+              const newSet = new Set(prev)
+              newSet.delete(deviceId)
+              return newSet
+            })
+          }
+        }
+        return updated
+      })
+      // Clear stale display feeds
+      setDisplayFeeds(prev => {
+        const updated = { ...prev }
+        for (const [deviceId, feed] of Object.entries(updated)) {
+          if (now - feed.lastUpdate > 5000) {
+            setActiveDisplayStreams(prev => {
               const newSet = new Set(prev)
               newSet.delete(deviceId)
               return newSet
@@ -124,6 +155,28 @@ function CameraMonitor() {
     }
   }
 
+  // Start display stream on a device
+  const startDisplay = (deviceId) => {
+    if (socket && connected) {
+      socket.emit('control:command', {
+        targetDeviceId: deviceId,
+        action: 'start-display',
+        commandId: `disp-start-${Date.now()}`,
+      })
+    }
+  }
+
+  // Stop display stream on a device
+  const stopDisplay = (deviceId) => {
+    if (socket && connected) {
+      socket.emit('control:command', {
+        targetDeviceId: deviceId,
+        action: 'stop-display',
+        commandId: `disp-stop-${Date.now()}`,
+      })
+    }
+  }
+
   // Start all cameras
   const startAllCameras = () => {
     devices.filter(d => d.status === 'online').forEach(d => startCamera(d.deviceId))
@@ -132,6 +185,16 @@ function CameraMonitor() {
   // Stop all cameras
   const stopAllCameras = () => {
     devices.forEach(d => stopCamera(d.deviceId))
+  }
+
+  // Start all displays
+  const startAllDisplays = () => {
+    devices.filter(d => d.status === 'online').forEach(d => startDisplay(d.deviceId))
+  }
+
+  // Stop all displays
+  const stopAllDisplays = () => {
+    devices.forEach(d => stopDisplay(d.deviceId))
   }
 
   const onlineDevices = devices.filter(d => d.status === 'online')
@@ -148,9 +211,12 @@ function CameraMonitor() {
         </div>
         <div style={styles.headerRight}>
           <button style={styles.controlBtn} onClick={startAllCameras}>
-            Start All Cameras
+            Start Cameras
           </button>
-          <button style={{ ...styles.controlBtn, ...styles.stopBtn }} onClick={stopAllCameras}>
+          <button style={{ ...styles.controlBtn, ...styles.displayStartBtn }} onClick={startAllDisplays}>
+            Start Displays
+          </button>
+          <button style={{ ...styles.controlBtn, ...styles.stopBtn }} onClick={() => { stopAllCameras(); stopAllDisplays(); }}>
             Stop All
           </button>
           <div style={styles.viewToggle}>
@@ -167,6 +233,12 @@ function CameraMonitor() {
               Single
             </button>
           </div>
+          <button
+            style={showDisplay ? styles.displayBtnActive : styles.displayBtn}
+            onClick={() => setShowDisplay(!showDisplay)}
+          >
+            {showDisplay ? '🖥️ Display ON' : '🖥️ Display OFF'}
+          </button>
           <div style={styles.connectionStatus}>
             <span style={{ ...styles.statusDot, backgroundColor: connected ? '#22c55e' : '#ef4444' }} />
             {connected ? 'Connected' : 'Disconnected'}
@@ -208,21 +280,47 @@ function CameraMonitor() {
                     </span>
                   </div>
 
-                  <div style={styles.cameraFeed}>
-                    {cameraFeeds[device.deviceId] && activeStreams.has(device.deviceId) ? (
-                      <img
-                        src={cameraFeeds[device.deviceId].frame}
-                        alt={`Feed from ${device.name}`}
-                        style={styles.feedImage}
-                      />
-                    ) : (
-                      <div style={styles.noFeed}>
-                        <span style={styles.noFeedIcon}>📷</span>
-                        <span>No feed</span>
+                  <div style={styles.feedsContainer}>
+                    {/* Camera Feed */}
+                    <div style={styles.cameraFeed}>
+                      <div style={styles.feedLabel}>📷 Camera</div>
+                      {cameraFeeds[device.deviceId] && activeStreams.has(device.deviceId) ? (
+                        <img
+                          src={cameraFeeds[device.deviceId].frame}
+                          alt={`Camera from ${device.name}`}
+                          style={styles.feedImage}
+                        />
+                      ) : (
+                        <div style={styles.noFeed}>
+                          <span style={styles.noFeedIcon}>📷</span>
+                          <span>No feed</span>
+                        </div>
+                      )}
+                      {activeStreams.has(device.deviceId) && (
+                        <div style={styles.liveIndicator}>LIVE</div>
+                      )}
+                    </div>
+
+                    {/* Display/Screen Feed */}
+                    {showDisplay && (
+                      <div style={styles.displayFeed}>
+                        <div style={styles.feedLabel}>🖥️ Display</div>
+                        {displayFeeds[device.deviceId] && activeDisplayStreams.has(device.deviceId) ? (
+                          <img
+                            src={displayFeeds[device.deviceId].frame}
+                            alt={`Display from ${device.name}`}
+                            style={styles.feedImage}
+                          />
+                        ) : (
+                          <div style={styles.noFeed}>
+                            <span style={styles.noFeedIcon}>🖥️</span>
+                            <span>No display</span>
+                          </div>
+                        )}
+                        {activeDisplayStreams.has(device.deviceId) && (
+                          <div style={styles.liveIndicatorDisplay}>LIVE</div>
+                        )}
                       </div>
-                    )}
-                    {activeStreams.has(device.deviceId) && (
-                      <div style={styles.liveIndicator}>LIVE</div>
                     )}
                   </div>
 
@@ -233,15 +331,33 @@ function CameraMonitor() {
                         onClick={(e) => { e.stopPropagation(); startCamera(device.deviceId) }}
                         disabled={device.status !== 'online'}
                       >
-                        Start Camera
+                        📷 Start
                       </button>
                     ) : (
                       <button
                         style={styles.stopCamBtn}
                         onClick={(e) => { e.stopPropagation(); stopCamera(device.deviceId) }}
                       >
-                        Stop Camera
+                        📷 Stop
                       </button>
+                    )}
+                    {showDisplay && (
+                      !activeDisplayStreams.has(device.deviceId) ? (
+                        <button
+                          style={styles.startDisplayBtn}
+                          onClick={(e) => { e.stopPropagation(); startDisplay(device.deviceId) }}
+                          disabled={device.status !== 'online'}
+                        >
+                          🖥️ Start
+                        </button>
+                      ) : (
+                        <button
+                          style={styles.stopDisplayBtn}
+                          onClick={(e) => { e.stopPropagation(); stopDisplay(device.deviceId) }}
+                        >
+                          🖥️ Stop
+                        </button>
+                      )
                     )}
                   </div>
                 </div>
@@ -291,22 +407,49 @@ function CameraMonitor() {
                     </div>
                   </div>
                   <div style={styles.mainFeedContent}>
-                    {cameraFeeds[focusedDevice] && activeStreams.has(focusedDevice) ? (
-                      <>
-                        <img
-                          src={cameraFeeds[focusedDevice].frame}
-                          alt="Camera feed"
-                          style={styles.mainFeedImage}
-                        />
-                        <div style={styles.mainLiveIndicator}>LIVE</div>
-                      </>
-                    ) : (
-                      <div style={styles.mainNoFeed}>
-                        <span style={styles.mainNoFeedIcon}>📷</span>
-                        <p>Camera not streaming</p>
-                        <p style={styles.mainNoFeedSub}>Click "Start Camera" to begin</p>
+                    <div style={styles.mainFeedsRow}>
+                      {/* Camera Feed */}
+                      <div style={styles.mainFeedPanel}>
+                        <div style={styles.mainFeedPanelHeader}>📷 Camera</div>
+                        {cameraFeeds[focusedDevice] && activeStreams.has(focusedDevice) ? (
+                          <div style={styles.mainFeedImageContainer}>
+                            <img
+                              src={cameraFeeds[focusedDevice].frame}
+                              alt="Camera feed"
+                              style={styles.mainFeedImage}
+                            />
+                            <div style={styles.mainLiveIndicator}>LIVE</div>
+                          </div>
+                        ) : (
+                          <div style={styles.mainNoFeed}>
+                            <span style={styles.mainNoFeedIcon}>📷</span>
+                            <p>Camera not streaming</p>
+                          </div>
+                        )}
                       </div>
-                    )}
+
+                      {/* Display Feed */}
+                      {showDisplay && (
+                        <div style={styles.mainFeedPanel}>
+                          <div style={styles.mainFeedPanelHeader}>🖥️ Display</div>
+                          {displayFeeds[focusedDevice] && activeDisplayStreams.has(focusedDevice) ? (
+                            <div style={styles.mainFeedImageContainer}>
+                              <img
+                                src={displayFeeds[focusedDevice].frame}
+                                alt="Display feed"
+                                style={styles.mainFeedImage}
+                              />
+                              <div style={styles.mainLiveIndicatorDisplay}>LIVE</div>
+                            </div>
+                          ) : (
+                            <div style={styles.mainNoFeed}>
+                              <span style={styles.mainNoFeedIcon}>🖥️</span>
+                              <p>Display not streaming</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </>
               ) : (
@@ -370,6 +513,9 @@ const styles = {
   stopBtn: {
     backgroundColor: '#ef4444',
   },
+  displayStartBtn: {
+    backgroundColor: '#3b82f6',
+  },
   viewToggle: {
     display: 'flex',
     backgroundColor: '#334155',
@@ -390,6 +536,24 @@ const styles = {
     backgroundColor: '#3b82f6',
     color: 'white',
     border: 'none',
+    cursor: 'pointer',
+  },
+  displayBtn: {
+    padding: '0.5rem 1rem',
+    fontSize: '0.8rem',
+    backgroundColor: '#475569',
+    color: '#94a3b8',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+  },
+  displayBtnActive: {
+    padding: '0.5rem 1rem',
+    fontSize: '0.8rem',
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
     cursor: 'pointer',
   },
   connectionStatus: {
@@ -452,13 +616,38 @@ const styles = {
     fontSize: '0.7rem',
     fontWeight: '500',
   },
+  feedsContainer: {
+    display: 'flex',
+    gap: '4px',
+  },
   cameraFeed: {
     position: 'relative',
+    flex: 1,
     aspectRatio: '4/3',
     backgroundColor: '#000',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  displayFeed: {
+    position: 'relative',
+    flex: 1,
+    aspectRatio: '16/9',
+    backgroundColor: '#111',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedLabel: {
+    position: 'absolute',
+    top: '4px',
+    left: '4px',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    color: '#fff',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    fontSize: '0.6rem',
+    zIndex: 10,
   },
   feedImage: {
     width: '100%',
@@ -477,24 +666,35 @@ const styles = {
   },
   liveIndicator: {
     position: 'absolute',
-    top: '10px',
-    right: '10px',
+    top: '24px',
+    right: '6px',
     backgroundColor: '#ef4444',
     color: 'white',
-    padding: '4px 10px',
+    padding: '3px 8px',
     borderRadius: '4px',
-    fontSize: '0.7rem',
+    fontSize: '0.6rem',
     fontWeight: '700',
-    animation: 'pulse 2s infinite',
+  },
+  liveIndicatorDisplay: {
+    position: 'absolute',
+    top: '24px',
+    right: '6px',
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    padding: '3px 8px',
+    borderRadius: '4px',
+    fontSize: '0.6rem',
+    fontWeight: '700',
   },
   cameraControls: {
     padding: '0.75rem 1rem',
     display: 'flex',
     justifyContent: 'center',
+    gap: '0.5rem',
   },
   startBtn: {
-    padding: '0.5rem 1.5rem',
-    fontSize: '0.8rem',
+    padding: '0.5rem 1rem',
+    fontSize: '0.75rem',
     fontWeight: '600',
     backgroundColor: '#22c55e',
     color: 'white',
@@ -503,10 +703,30 @@ const styles = {
     cursor: 'pointer',
   },
   stopCamBtn: {
-    padding: '0.5rem 1.5rem',
-    fontSize: '0.8rem',
+    padding: '0.5rem 1rem',
+    fontSize: '0.75rem',
     fontWeight: '600',
     backgroundColor: '#ef4444',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+  },
+  startDisplayBtn: {
+    padding: '0.5rem 1rem',
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+  },
+  stopDisplayBtn: {
+    padding: '0.5rem 1rem',
+    fontSize: '0.75rem',
+    fontWeight: '600',
+    backgroundColor: '#6366f1',
     color: 'white',
     border: 'none',
     borderRadius: '6px',
@@ -576,6 +796,38 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#000',
+    padding: '1rem',
+  },
+  mainFeedsRow: {
+    display: 'flex',
+    gap: '1rem',
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mainFeedPanel: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    maxHeight: '100%',
+    backgroundColor: '#111',
+    borderRadius: '8px',
+    overflow: 'hidden',
+  },
+  mainFeedPanelHeader: {
+    padding: '0.5rem 1rem',
+    backgroundColor: '#1e293b',
+    color: '#e2e8f0',
+    fontSize: '0.85rem',
+    fontWeight: '600',
+  },
+  mainFeedImageContainer: {
+    position: 'relative',
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mainFeedImage: {
     maxWidth: '100%',
@@ -584,13 +836,24 @@ const styles = {
   },
   mainLiveIndicator: {
     position: 'absolute',
-    top: '20px',
-    right: '20px',
+    top: '10px',
+    right: '10px',
     backgroundColor: '#ef4444',
     color: 'white',
-    padding: '6px 16px',
-    borderRadius: '6px',
-    fontSize: '0.9rem',
+    padding: '4px 12px',
+    borderRadius: '4px',
+    fontSize: '0.75rem',
+    fontWeight: '700',
+  },
+  mainLiveIndicatorDisplay: {
+    position: 'absolute',
+    top: '10px',
+    right: '10px',
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    padding: '4px 12px',
+    borderRadius: '4px',
+    fontSize: '0.75rem',
     fontWeight: '700',
   },
   mainNoFeed: {

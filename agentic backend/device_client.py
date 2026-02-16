@@ -114,6 +114,13 @@ class DeviceClient:
             if self.on_emergency:
                 self.on_emergency(data)
 
+        @self.sio.on("emergency:stop")
+        def on_emergency_stop(data):
+            print(f"[DeviceClient] EMERGENCY STOPPED")
+            if self.on_emergency:
+                # Pass a special stop signal
+                self.on_emergency({"action": "stop", "message": None})
+
         @self.sio.event
         def connect_error(data):
             print(f"[DeviceClient] Connection error: {data}")
@@ -239,6 +246,23 @@ class DeviceClient:
             frame_b64 = frame_bytes
 
         self.sio.emit("camera:frame", {
+            "deviceId": self.device_id,
+            "frame": frame_b64,
+            "timestamp": datetime.now().isoformat(),
+        })
+        return True
+
+    def emit_display_frame(self, frame_bytes):
+        """Send display/screen frame (JPEG bytes) to Supernode."""
+        if not self._connected:
+            return False
+
+        if isinstance(frame_bytes, bytes):
+            frame_b64 = base64.b64encode(frame_bytes).decode()
+        else:
+            frame_b64 = frame_bytes
+
+        self.sio.emit("display:frame", {
             "deviceId": self.device_id,
             "frame": frame_b64,
             "timestamp": datetime.now().isoformat(),

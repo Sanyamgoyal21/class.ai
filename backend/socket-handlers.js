@@ -241,6 +241,19 @@ export function setupSocketHandlers(io) {
       });
     });
 
+    // Display/Screen streaming (alongside camera)
+    socket.on("display:frame", (data) => {
+      const device = deviceRegistry.get(socket.id);
+      if (!device) return;
+
+      // Forward to dashboards viewing this display
+      io.to("device:dashboard").emit("display:frame", {
+        deviceId: device.deviceId,
+        frame: data.frame, // base64 JPEG
+        timestamp: data.timestamp,
+      });
+    });
+
     // Broadcast message from dashboard to all devices
     socket.on("broadcast:message", (data) => {
       const sender = deviceRegistry.get(socket.id);
@@ -304,6 +317,43 @@ export function setupSocketHandlers(io) {
       // Acknowledge to sender
       socket.emit("emergency:sent", {
         message,
+        targetCount: targets.length || "all",
+      });
+    });
+
+    // Stop/Clear emergency broadcast
+    socket.on("emergency:stop", (data) => {
+      const sender = deviceRegistry.get(socket.id);
+
+      // Only dashboards can stop emergency broadcasts
+      if (!sender || sender.type !== "dashboard") {
+        socket.emit("emergency:error", { error: "Unauthorized" });
+        return;
+      }
+
+      const { targetDeviceIds } = data || {};
+
+      console.log("EMERGENCY STOP");
+
+      // Send stop to specified devices or all classrooms
+      const targets = targetDeviceIds || [];
+      if (targets.length > 0) {
+        for (const deviceId of targets) {
+          io.to(`device:${deviceId}`).emit("emergency:stop", {
+            from: sender.name || "Admin",
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } else {
+        // Fallback: send to all classroom devices
+        io.to("device:classroom").emit("emergency:stop", {
+          from: sender.name || "Admin",
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Acknowledge to sender
+      socket.emit("emergency:stopped", {
         targetCount: targets.length || "all",
       });
     });

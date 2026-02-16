@@ -10,10 +10,33 @@ face_recognition
 dlib
 pyaudio
 python-dotenv
+speexdsp  # Acoustic Echo Cancellation for doubt detection
 
 # Supernode communication
 python-socketio[client]
 
+# Screen capture for display streaming
+mss
+
 # Development / utilities
 pytest
 flake8
+# Core dependencies
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Face recognition (optional - install if using face detection)
+# Requires dlib which needs cmake and C++ compiler
+# face-recognition>=1.3.0
+
+# Audio/VAD dependencies (optional)
+# pyaudio>=0.2.13
+# webrtcvad>=2.0.10
+
+# Speech-to-Text (optional - for Whisper)
+# openai-whisper>=20231117
+# torch>=2.0.0
+
+# Networking (for Supernode communication)
+# python-socketio[client]>=5.10.0
+# requests>=2.31.0
