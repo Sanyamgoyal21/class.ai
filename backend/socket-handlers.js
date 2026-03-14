@@ -832,8 +832,17 @@ function findDeviceById(deviceId) {
 }
 
 function getDeviceList() {
-  const devices = [];
+  // Deduplicate by deviceId — keep the entry with the most recent heartbeat
+  // This handles the case where a classroom navigates away and back (new socket, same deviceId)
+  const byDeviceId = new Map();
   for (const device of deviceRegistry.values()) {
+    const existing = byDeviceId.get(device.deviceId);
+    if (!existing || device.lastHeartbeat > existing.lastHeartbeat) {
+      byDeviceId.set(device.deviceId, device);
+    }
+  }
+  const devices = [];
+  for (const device of byDeviceId.values()) {
     devices.push({
       deviceId: device.deviceId,
       type: device.type,

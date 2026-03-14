@@ -6,3 +6,7 @@ data/
 .vite/
 .claude/
 .github/
+dist/
+.venv/
+__pycache__/
+.vite

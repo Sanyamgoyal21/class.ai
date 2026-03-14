@@ -463,8 +463,13 @@
     const urlParams = new URLSearchParams(window.location.search);
     const CLASSROOM_NAME = urlParams.get('name') || 'Classroom ' + Math.floor(Math.random() * 100);
 
-    // Generate unique device ID for this classroom instance
-    const DEVICE_ID = `classroom-${CLASSROOM_NAME.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString(36)}`;
+    // Stable device ID — persists across doubt-page navigation for same room
+    const _stableIdKey = `deviceId_${CLASSROOM_NAME}`;
+    const DEVICE_ID = sessionStorage.getItem(_stableIdKey) || (() => {
+      const id = `classroom-${CLASSROOM_NAME.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString(36)}`;
+      sessionStorage.setItem(_stableIdKey, id);
+      return id;
+    })();
 
     // =================== STATE ===================
 
@@ -472,8 +477,14 @@
     let ytPlayer = null;
     let ytReady = false;
     let ytPendingVideoId = null;
-    let currentVideoUrl = null;
-    let currentVideoTime = 0;
+
+    // Restore video state if returning from doubt page
+    const _vidStateKey = `videoState_${CLASSROOM_NAME}`;
+    const _restoredState = (() => {
+      try { return JSON.parse(sessionStorage.getItem(_vidStateKey) || 'null'); } catch { return null; }
+    })();
+    let currentVideoUrl = _restoredState?.url || null;
+    let currentVideoTime = _restoredState?.time || 0;
     let peerConnection = null;
     let announcementSessionId = null;
 
@@ -697,8 +708,12 @@
       youtubeContainer.classList.remove('hidden');
 
       if (ytReady && ytPlayer && ytPlayer.loadVideoById) {
-        // Player already initialized - load new video
-        ytPlayer.loadVideoById(videoId);
+        // Player already initialized - load new video, seeking to saved time if any
+        if (currentVideoTime > 0) {
+          ytPlayer.loadVideoById({ videoId, startSeconds: currentVideoTime });
+        } else {
+          ytPlayer.loadVideoById(videoId);
+        }
         if (autoPlay) ytPlayer.playVideo();
       } else {
         // Store video ID to play when player is ready
@@ -731,6 +746,10 @@
           onReady: (event) => {
             ytReady = true;
             console.log('[Classroom] YouTube player ready');
+            // Seek to saved position if returning from doubt page
+            if (currentVideoTime > 0 && event.target.seekTo) {
+              event.target.seekTo(currentVideoTime, true);
+            }
             if (autoPlay) event.target.playVideo();
           },
           onStateChange: (event) => {
@@ -769,6 +788,11 @@
 
       videoPlayer.src = url;
       videoPlayer.volume = volume;
+
+      // Seek to saved position if returning from doubt page
+      if (currentVideoTime > 0) {
+        videoPlayer.currentTime = currentVideoTime;
+      }
 
       if (autoPlay) {
         // Try to autoplay (may be blocked by browser)
@@ -1564,10 +1588,74 @@ If no context is available, answer the question to the best of your ability.`;
       console.log('[Classroom] Display streaming stopped');
     }
 
+    // =================== VOICE COMMANDS ===================
+
+    function startVoiceCommands() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        console.warn('[Classroom] Speech recognition not supported');
+        return;
+      }
+
+      const recognition = new SR();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+        console.log('[Classroom] Voice command heard:', transcript);
+
+        if (transcript.includes('doubt')) {
+          console.log('[Classroom] "Doubt" detected — navigating to DoubtCanvas');
+          // Save current video position so we can resume after doubt is resolved
+          const snapTime = videoPlayer.src && !videoPlayer.paused
+            ? videoPlayer.currentTime
+            : (ytPlayer?.getCurrentTime ? ytPlayer.getCurrentTime() : currentVideoTime);
+          sessionStorage.setItem(_vidStateKey, JSON.stringify({
+            url: currentVideoUrl,
+            time: snapTime || currentVideoTime,
+          }));
+          window.location.href = `http://localhost:5173/?page=doubt&room=${encodeURIComponent(CLASSROOM_NAME)}`;
+        }
+      };
+
+      recognition.onerror = (event) => {
+        if (event.error !== 'no-speech') {
+          console.warn('[Classroom] Voice recognition error:', event.error);
+        }
+      };
+
+      // Keep recognition alive
+      recognition.onend = () => {
+        try { recognition.start(); } catch { /* ignore */ }
+      };
+
+      try {
+        recognition.start();
+        console.log('[Classroom] Voice commands active — say "Doubt" to open Doubt Canvas');
+      } catch (e) {
+        console.warn('[Classroom] Could not start voice commands:', e.message);
+      }
+    }
+
     // =================== START ===================
 
     // Connect to server when page loads
     connectSocket();
+
+    // Start voice command detection
+    startVoiceCommands();
+
+    // Resume video if returning from doubt page
+    if (_restoredState?.url) {
+      console.log('[Classroom] Resuming video from doubt break:', _restoredState.url, 'at', _restoredState.time);
+      sessionStorage.removeItem(_vidStateKey); // consume it — don't re-restore on hard reload
+      // Small delay to let socket and player initialise
+      setTimeout(() => {
+        handleVideoPlay({ url: _restoredState.url, autoPlay: true });
+      }, 800);
+    }
 
     // Log device info
     console.log('[Classroom] Device ID:', DEVICE_ID);
