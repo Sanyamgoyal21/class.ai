@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
 
-const SUPERNODE_URL = 'http://localhost:5000'
+const SUPERNODE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
 
 // Load saved presets from localStorage
 const loadSavedPresets = () => {

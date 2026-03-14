@@ -27,7 +27,7 @@ export default function App() {
     event.preventDefault()
     const trimmedRoom = roomNumber.trim()
     if (!trimmedRoom) return
-    window.location.href = `http://localhost:5173/classroom.html?name=${encodeURIComponent(trimmedRoom)}`
+    window.location.href = `/classroom.html?name=${encodeURIComponent(trimmedRoom)}`
   }
 
   // DoubtCanvas is fullscreen - no nav
