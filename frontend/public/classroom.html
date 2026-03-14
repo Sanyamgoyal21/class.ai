@@ -452,7 +452,7 @@
     // =================== CONFIGURATION ===================
 
     // Server URL - change this for production
-    const SUPERNODE_URL = window.SUPERNODE_URL || 'http://localhost:5000';
+    const SUPERNODE_URL = window.SUPERNODE_URL || 'https://class-ai-backend.onrender.com';
 
     // Local Ollama configuration (runs on the classroom device)
     const OLLAMA_URL = window.OLLAMA_URL || 'http://localhost:11434';
@@ -1616,7 +1616,7 @@ If no context is available, answer the question to the best of your ability.`;
             url: currentVideoUrl,
             time: snapTime || currentVideoTime,
           }));
-          window.location.href = `http://localhost:5173/?page=doubt&room=${encodeURIComponent(CLASSROOM_NAME)}`;
+          window.location.href = `/?page=doubt&room=${encodeURIComponent(CLASSROOM_NAME)}`;
         }
       };
 
