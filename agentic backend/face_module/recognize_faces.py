@@ -32,12 +32,12 @@ class FaceRecognizer(threading.Thread):
 
     def __init__(
         self,
-        known_dir="data/faces",
+        known_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "faces"),
         camera_index=0,
         display=True,
         lbph_confidence_thresh=70,
         detection_model='hog',  # Changed from 'cnn' to 'hog' for much faster detection
-        tolerance=0.45,
+        tolerance=0.6,
         min_face_area=2000,
         confirm_frames=3,
         process_every_n_frames=2,  # Process every Nth frame to reduce lag
@@ -110,14 +110,23 @@ class FaceRecognizer(threading.Thread):
                             path = os.path.join(student_dir, img)
                             try:
                                 image = face_recognition.load_image_file(path)
-                                encoding = face_recognition.face_encodings(image)
+                                # Ensure RGB (saved images may be grayscale)
+                                if image.ndim == 2:
+                                    image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+                                elif image.shape[2] == 1:
+                                    image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+                                # Images are pre-cropped faces (200x200), so pass the
+                                # full image as the face location to skip re-detection
+                                h, w = image.shape[:2]
+                                known_locations = [(0, w, h, 0)]  # top, right, bottom, left
+                                encoding = face_recognition.face_encodings(image, known_face_locations=known_locations)
                                 if encoding:
                                     self.known_encodings.append(encoding[0])
                                     self.known_names.append(student)
                             except Exception:
                                 continue
 
-                print("Using dlib/face_recognition for face matching.")
+                print(f"Using dlib/face_recognition for face matching. Loaded {len(self.known_encodings)} encodings for: {list(set(self.known_names))}")
             except Exception as e:
                 print("Error loading faces for face_recognition:", e)
                 # fall back to filesystem load
