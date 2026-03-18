@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
 
-const SUPERNODE_URL = 'http://localhost:5000'
+const SUPERNODE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
 
 // Load saved presets from localStorage
 const loadSavedPresets = () => {
@@ -614,9 +614,9 @@ function SuperNode() {
               <h3 style={styles.subTitle}>System Status</h3>
               <div style={styles.healthGrid}>
                 <div style={styles.healthItem}>
-                  <span>AI (Ollama)</span>
-                  <span style={{ color: health.components?.ollama?.healthy ? '#22c55e' : '#ef4444' }}>
-                    {health.components?.ollama?.healthy ? '✓ Online' : '✗ Offline'}
+                  <span>AI (Qwen)</span>
+                  <span style={{ color: health.components?.qwen?.available ? '#22c55e' : '#ef4444' }}>
+                    {health.components?.qwen?.available ? '✓ Online' : '✗ Offline'}
                   </span>
                 </div>
                 <div style={styles.healthItem}>
