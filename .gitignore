@@ -6,3 +6,6 @@ data/
 .vite/
 .claude/
 .github/
+agentic backend/.venv/
+agentic backend/__pycache__/
+agentic backend/*.pyc/
