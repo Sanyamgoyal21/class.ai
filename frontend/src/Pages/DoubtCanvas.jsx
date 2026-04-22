@@ -183,7 +183,7 @@ function DoubtCanvas() {
       setLiveTranscript('')
       setCurrentSpeech('')
     }
-    window.location.href = `/classroom.html?name=${encodeURIComponent(roomName)}`
+    window.location.href = `/classroom.html?name=${encodeURIComponent(roomName)}&backend=${encodeURIComponent(BACKEND_URL)}`
   }
 
   useEffect(() => {

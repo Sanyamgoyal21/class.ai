@@ -3,6 +3,7 @@ import Voice from './Pages/Voice.jsx'
 import SuperNode from './Pages/SuperNode.jsx'
 import CameraMonitor from './Pages/CameraMonitor.jsx'
 import DoubtCanvas from './Pages/DoubtCanvas.jsx'
+import { BACKEND_URL } from './utils/backendUrl'
 import './App.css'
 
 export default function App() {
@@ -27,7 +28,7 @@ export default function App() {
     event.preventDefault()
     const trimmedRoom = roomNumber.trim()
     if (!trimmedRoom) return
-    window.location.href = `/classroom.html?name=${encodeURIComponent(trimmedRoom)}`
+    window.location.href = `/classroom.html?name=${encodeURIComponent(trimmedRoom)}&backend=${encodeURIComponent(BACKEND_URL)}`
   }
 
   // DoubtCanvas is fullscreen - no nav

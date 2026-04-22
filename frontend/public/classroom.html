@@ -462,8 +462,9 @@
     }
 
     function resolveBackendUrl() {
-      const configuredUrl = normalizeUrl(window.SUPERNODE_URL);
       const currentUrl = new URL(window.location.href);
+      const queryBackendUrl = normalizeUrl(currentUrl.searchParams.get('backend'));
+      const configuredUrl = queryBackendUrl || normalizeUrl(window.SUPERNODE_URL) || normalizeUrl(sessionStorage.getItem('classroomBackendUrl'));
       const localBackendUrl = `${currentUrl.protocol}//${currentUrl.hostname}:5000`;
 
       if (configuredUrl) {
@@ -473,12 +474,15 @@
           if (!DEAD_REMOTE_HOSTS.has(configuredHost)) return configuredUrl;
           return localBackendUrl;
         }
+        sessionStorage.setItem('classroomBackendUrl', configuredUrl);
         return configuredUrl;
       }
 
       if (isLocalHost(currentUrl.hostname)) return localBackendUrl;
       if (currentUrl.port && currentUrl.port !== '5000') return localBackendUrl;
-      return currentUrl.origin.replace(/\/$/, '');
+      const inferredUrl = currentUrl.origin.replace(/\/$/, '');
+      sessionStorage.setItem('classroomBackendUrl', inferredUrl);
+      return inferredUrl;
     }
 
     const SUPERNODE_URL = resolveBackendUrl();
