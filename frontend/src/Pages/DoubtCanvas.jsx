@@ -4,6 +4,7 @@ import '@excalidraw/excalidraw/index.css'
 import { animateDiagram, applyViewportToDiagram } from '../utils/DiagramEngine.ts'
 import { animateAlgorithm, applyAlgorithmStep, normalizeInstruction } from '../utils/AlgorithmVisualizer.ts'
 import { renderVisualsChunk } from '../utils/VisualInstructionEngine.ts'
+import { BACKEND_URL } from '../utils/backendUrl'
 
 function DoubtCanvas() {
   const [, setChatMessages] = useState([])
@@ -352,7 +353,7 @@ function DoubtCanvas() {
 
   const connectSSE = (question, requestId) =>
     new Promise((resolve, reject) => {
-      const url = `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/doubt/stream?q=${encodeURIComponent(question)}&feynman=1`
+      const url = `${BACKEND_URL}/api/doubt/stream?q=${encodeURIComponent(question)}&feynman=1`
       const eventSource = new EventSource(url)
       esRef.current = eventSource
       const msgId = Date.now()
@@ -516,7 +517,7 @@ function DoubtCanvas() {
 
     if (!sseSucceeded) {
       try {
-        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/doubt`, {
+        const response = await fetch(`${BACKEND_URL}/api/doubt`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ question: normalizedQuestion }),

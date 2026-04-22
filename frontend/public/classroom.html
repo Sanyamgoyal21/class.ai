@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Classroom Display</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111827'/%3E%3Cpath d='M7 10h18v12H7z' fill='%233b82f6'/%3E%3Cpath d='M11 14h10v4H11z' fill='white'/%3E%3C/svg%3E">
   <style>
     * {
       margin: 0;
@@ -442,17 +443,45 @@
     </div>
   </div>
 
-  <!-- Socket.IO Client (CDN) -->
-  <script src="https://cdn.socket.io/4.8.0/socket.io.min.js"></script>
-
-  <!-- YouTube IFrame API -->
-  <script src="https://www.youtube.com/iframe_api"></script>
-
   <script>
     // =================== CONFIGURATION ===================
 
-    // Server URL - change this for production
-    const SUPERNODE_URL = window.SUPERNODE_URL || 'https://class-ai-backend.onrender.com';
+    const DEAD_REMOTE_HOSTS = new Set(['class-ai-backend.onrender.com']);
+
+    function normalizeUrl(value) {
+      if (!value || typeof value !== 'string') return null;
+      try {
+        return new URL(value).toString().replace(/\/$/, '');
+      } catch {
+        return null;
+      }
+    }
+
+    function isLocalHost(hostname) {
+      return hostname === 'localhost' || hostname === '127.0.0.1';
+    }
+
+    function resolveBackendUrl() {
+      const configuredUrl = normalizeUrl(window.SUPERNODE_URL);
+      const currentUrl = new URL(window.location.href);
+      const localBackendUrl = `${currentUrl.protocol}//${currentUrl.hostname}:5000`;
+
+      if (configuredUrl) {
+        const configuredHost = new URL(configuredUrl).hostname;
+        if (isLocalHost(currentUrl.hostname)) {
+          if (isLocalHost(configuredHost)) return configuredUrl;
+          if (!DEAD_REMOTE_HOSTS.has(configuredHost)) return configuredUrl;
+          return localBackendUrl;
+        }
+        return configuredUrl;
+      }
+
+      if (isLocalHost(currentUrl.hostname)) return localBackendUrl;
+      if (currentUrl.port && currentUrl.port !== '5000') return localBackendUrl;
+      return currentUrl.origin.replace(/\/$/, '');
+    }
+
+    const SUPERNODE_URL = resolveBackendUrl();
 
     // Local Ollama configuration (runs on the classroom device)
     const OLLAMA_URL = window.OLLAMA_URL || 'http://localhost:11434';
@@ -476,6 +505,8 @@
     let socket = null;
     let ytPlayer = null;
     let ytReady = false;
+    let ytApiRequested = false;
+    let ytApiFailed = false;
     let ytPendingVideoId = null;
 
     // Restore video state if returning from doubt page
@@ -552,6 +583,14 @@
 
     function connectSocket() {
       console.log(`[Classroom] Connecting to ${SUPERNODE_URL}...`);
+
+      if (typeof window.io !== 'function') {
+        console.error('[Classroom] Socket.IO client did not load');
+        connectionDot.classList.remove('online');
+        connectionStatus.textContent = 'Socket client unavailable';
+        showBroadcastBanner('Cannot load the Socket.IO client. Please verify the backend is reachable.');
+        return;
+      }
 
       socket = io(SUPERNODE_URL, {
         reconnection: true,
@@ -707,6 +746,11 @@
       hideAllPlayers();
       youtubeContainer.classList.remove('hidden');
 
+      if (ytApiFailed) {
+        showBroadcastBanner('YouTube playback is unavailable on this device right now.');
+        return;
+      }
+
       if (ytReady && ytPlayer && ytPlayer.loadVideoById) {
         // Player already initialized - load new video, seeking to saved time if any
         if (currentVideoTime > 0) {
@@ -722,9 +766,50 @@
         // If YT API is loaded but player not created yet
         if (window.YT && window.YT.Player && !ytPlayer) {
           createYouTubePlayer(videoId, autoPlay);
+        } else if (!ytApiRequested) {
+          loadYouTubeApi();
         }
         // Otherwise, onYouTubeIframeAPIReady will handle it
       }
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[src="${src}"]`);
+        if (existing) {
+          if (existing.dataset.loaded === 'true') {
+            resolve();
+            return;
+          }
+          existing.addEventListener('load', resolve, { once: true });
+          existing.addEventListener('error', reject, { once: true });
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.addEventListener('load', () => {
+          script.dataset.loaded = 'true';
+          resolve();
+        }, { once: true });
+        script.addEventListener('error', reject, { once: true });
+        document.head.appendChild(script);
+      });
+    }
+
+    function loadSocketClient() {
+      return loadScript(`${SUPERNODE_URL}/socket.io/socket.io.js`);
+    }
+
+    function loadYouTubeApi() {
+      ytApiRequested = true;
+      loadScript('https://www.youtube.com/iframe_api')
+        .catch(() => {
+          ytApiFailed = true;
+          console.error('[Classroom] Failed to load YouTube IFrame API');
+          showBroadcastBanner('YouTube playback is unavailable because the YouTube API could not be loaded.');
+        });
     }
 
     // Create YouTube player instance
@@ -1642,7 +1727,16 @@ If no context is available, answer the question to the best of your ability.`;
     // =================== START ===================
 
     // Connect to server when page loads
-    connectSocket();
+    loadSocketClient()
+      .then(() => {
+        connectSocket();
+      })
+      .catch((error) => {
+        console.error('[Classroom] Failed to load Socket.IO client:', error);
+        connectionDot.classList.remove('online');
+        connectionStatus.textContent = 'Backend unreachable';
+        showBroadcastBanner(`Cannot reach backend at ${SUPERNODE_URL}`);
+      });
 
     // Start voice command detection
     startVoiceCommands();

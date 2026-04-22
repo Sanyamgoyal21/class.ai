@@ -610,6 +610,12 @@ function inferAlgorithmType(question) {
   if (q.includes("binary search")) return "binary_search_walkthrough";
   if (q.includes("bubble sort")) return "bubble_sort";
   if (q.includes("insertion sort")) return "insertion_sort";
+  if (q.includes("selection sort")) return "selection_sort";
+  if (q.includes("merge sort")) return "merge_sort";
+  if (q.includes("quick sort") || q.includes("quicksort")) return "quick_sort";
+  if (q.includes("linear search")) return "linear_search";
+  if (q.includes("stack")) return "stack_push_pop";
+  if (q.includes("queue")) return "queue_enqueue_dequeue";
   if (q.includes("breadth first search") || /\bbfs\b/.test(q)) return "bfs";
   if (q.includes("depth first search") || /\bdfs\b/.test(q)) return "dfs";
   if (q.includes("knapsack")) return "knapsack_dp";
@@ -756,6 +762,49 @@ function fallbackAlgorithmForQuestion(question, preferredType = "") {
         capacity: 7,
         code: "dp[i][w] = best value using first i items with capacity w",
       };
+    case "selection_sort":
+      return {
+        type: "selection_sort",
+        title: "Selection Sort",
+        array: [29, 10, 14, 37, 13],
+        code: "find minimum in unsorted part, swap it to front",
+      };
+    case "merge_sort":
+      return {
+        type: "merge_sort",
+        title: "Merge Sort",
+        array: [38, 27, 43, 3, 9, 82, 10],
+        code: "divide array in half, sort each half, merge them",
+      };
+    case "quick_sort":
+      return {
+        type: "quick_sort",
+        title: "Quick Sort",
+        array: [10, 7, 8, 9, 1, 5],
+        code: "pick pivot, partition around it, recurse on both sides",
+      };
+    case "linear_search":
+      return {
+        type: "linear_search",
+        title: "Linear Search",
+        array: [4, 2, 7, 1, 9, 3, 6, 8],
+        target: 9,
+        code: "scan each element one by one until target found",
+      };
+    case "stack_push_pop":
+      return {
+        type: "stack_push_pop",
+        title: "Stack Push & Pop",
+        values: [10, 20, 30, 40, 50],
+        code: "push adds to top; pop removes from top (LIFO)",
+      };
+    case "queue_enqueue_dequeue":
+      return {
+        type: "queue_enqueue_dequeue",
+        title: "Queue Enqueue & Dequeue",
+        values: [10, 20, 30, 40, 50],
+        code: "enqueue adds to rear; dequeue removes from front (FIFO)",
+      };
     case "lis_dp":
     default:
       return {
@@ -788,6 +837,30 @@ function explainQuestionHeuristically(question, feynmanMode = false) {
 
   if (q.includes("insertion sort")) {
     return "Insertion sort builds the sorted part one element at a time. Each new element is inserted into the correct position among the elements that are already sorted.";
+  }
+
+  if (q.includes("selection sort")) {
+    return "Selection sort finds the smallest element in the unsorted portion and swaps it to the front. It repeats this for each position, building the sorted section one element at a time.";
+  }
+
+  if (q.includes("merge sort")) {
+    return "Merge sort splits the array in half repeatedly until each piece has one element, then merges those pieces back together in sorted order. It is efficient and stable with O(n log n) time complexity.";
+  }
+
+  if (q.includes("quick sort") || q.includes("quicksort")) {
+    return "Quick sort picks a pivot element and partitions the array so that elements smaller than the pivot go left and larger ones go right. It then recursively sorts both sides.";
+  }
+
+  if (q.includes("linear search")) {
+    return "Linear search scans each element one by one from the beginning until it finds the target or reaches the end. It works on unsorted arrays but is slower than binary search for large inputs.";
+  }
+
+  if (q.includes("stack")) {
+    return "A stack is a data structure that follows Last In First Out order. Push adds an element to the top and Pop removes from the top. It is used in function calls, undo operations, and expression parsing.";
+  }
+
+  if (q.includes("queue")) {
+    return "A queue follows First In First Out order. Enqueue adds an element to the rear and Dequeue removes from the front. It is used in scheduling, BFS, and task processing.";
   }
 
   if (q.includes("breadth first search") || /\bbfs\b/.test(q)) {
@@ -1275,17 +1348,69 @@ app.get("/api/doubt/stream", async (req, res) => {
   let disconnected = false;
   req.on("close", () => disconnected = true);
 
+  // Detect if the question is algorithm-type before the full pipeline runs,
+  // so we can choose the right streaming mode early.
+  const wantsAlgo = shouldUseAlgorithm(question.trim());
+
   try {
     const parsed = await runPlannerPipeline(question.trim(), feynmanMode);
+
+    // ── Determine whether the pipeline produced an algorithm ──────────────────
+    // parsed.algorithm is set when runPlannerPipeline chose algorithm mode;
+    // we also fall back to the heuristic detection.
+    const algoPayload = parsed.algorithm || null;
+    const isAlgorithmLesson = Boolean(algoPayload) || wantsAlgo;
 
     sseWrite(res, {
       type: "lesson_start",
       payload: {
         topic: parsed.topic || question.trim(),
-        mode: "visuals",
-      }
+        mode: isAlgorithmLesson ? "algorithm" : "visuals",
+      },
     });
 
+    // ── Algorithm path ────────────────────────────────────────────────────────
+    if (isAlgorithmLesson) {
+      // Resolve the algorithm object: prefer what the pipeline produced,
+      // fall back to the heuristic algorithm for this question type.
+      const resolvedAlgo = algoPayload
+        ? validateAlgorithm(algoPayload)
+        : validateAlgorithm(fallbackAlgorithmForQuestion(question.trim(), inferAlgorithmType(question.trim())));
+
+      const finalAlgo = resolvedAlgo || fallbackAlgorithmForQuestion(question.trim(), inferAlgorithmType(question.trim()));
+
+      // Send the algorithm definition so the client can normalize steps.
+      sseWrite(res, { type: "algorithm_init", payload: finalAlgo });
+
+      const sentences = splitChatIntoSentences(parsed.chat || explainQuestionHeuristically(question.trim(), feynmanMode));
+      const stepCount = (finalAlgo.steps || []).length;
+
+      // Stream one chat sentence at a time, advancing algorithm steps in sync.
+      for (let i = 0; i < sentences.length; i++) {
+        if (disconnected) return;
+
+        sseWrite(res, { type: "chat_chunk", payload: sentences[i] });
+        await wait(80);
+
+        // Advance the visualizer proportionally through the steps.
+        const fraction = stepCount > 0 ? Math.min(1, (i + 1) / sentences.length) : 0;
+        sseWrite(res, { type: "algorithm_advance", payload: { fraction } });
+        await wait(120);
+      }
+
+      if (!disconnected) {
+        // Ensure we reach the final step.
+        if (stepCount > 0) {
+          sseWrite(res, { type: "algorithm_advance", payload: { fraction: 1 } });
+          await wait(80);
+        }
+        sseWrite(res, { type: "complete" });
+        res.end();
+      }
+      return;
+    }
+
+    // ── Visuals path (existing behavior) ─────────────────────────────────────
     const cues = Array.isArray(parsed.sync) && parsed.sync.length
       ? parsed.sync
       : distributeVisualsAcrossSentences(splitChatIntoSentences(parsed.chat), parsed.visuals);
@@ -1294,11 +1419,7 @@ app.get("/api/doubt/stream", async (req, res) => {
       if (disconnected) return;
 
       const cue = cues[i];
-      sseWrite(res, {
-        type: "chat_chunk",
-        payload: cue.sentence,
-      });
-
+      sseWrite(res, { type: "chat_chunk", payload: cue.sentence });
       await wait(100);
 
       sseWrite(res, {
@@ -1310,7 +1431,6 @@ app.get("/api/doubt/stream", async (req, res) => {
           highlightIds: cue.highlightIds,
         },
       });
-
       await wait(180);
     }
 
@@ -1326,10 +1446,7 @@ app.get("/api/doubt/stream", async (req, res) => {
 
       sseWrite(res, {
         type: "lesson_start",
-        payload: {
-          topic: question.trim(),
-          mode: "visuals",
-        },
+        payload: { topic: question.trim(), mode: "visuals" },
       });
       const fallbackCues = Array.isArray(fallback.sync) && fallback.sync.length
         ? fallback.sync
