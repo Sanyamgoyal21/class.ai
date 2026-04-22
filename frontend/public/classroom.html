@@ -464,7 +464,11 @@
     function resolveBackendUrl() {
       const currentUrl = new URL(window.location.href);
       const queryBackendUrl = normalizeUrl(currentUrl.searchParams.get('backend'));
-      const configuredUrl = queryBackendUrl || normalizeUrl(window.SUPERNODE_URL) || normalizeUrl(sessionStorage.getItem('classroomBackendUrl'));
+      const configuredUrl =
+        queryBackendUrl ||
+        normalizeUrl(window.SUPERNODE_URL) ||
+        normalizeUrl(sessionStorage.getItem('classroomBackendUrl')) ||
+        normalizeUrl(localStorage.getItem('classroomBackendUrl'));
       const localBackendUrl = `${currentUrl.protocol}//${currentUrl.hostname}:5000`;
 
       if (configuredUrl) {
@@ -475,6 +479,7 @@
           return localBackendUrl;
         }
         sessionStorage.setItem('classroomBackendUrl', configuredUrl);
+        localStorage.setItem('classroomBackendUrl', configuredUrl);
         return configuredUrl;
       }
 
@@ -482,6 +487,7 @@
       if (currentUrl.port && currentUrl.port !== '5000') return localBackendUrl;
       const inferredUrl = currentUrl.origin.replace(/\/$/, '');
       sessionStorage.setItem('classroomBackendUrl', inferredUrl);
+      localStorage.setItem('classroomBackendUrl', inferredUrl);
       return inferredUrl;
     }
 
@@ -804,6 +810,15 @@
 
     function loadSocketClient() {
       return loadScript(`${SUPERNODE_URL}/socket.io/socket.io.js`);
+    }
+
+    function showBroadcastBanner(message, duration = 5000) {
+      if (!broadcastBanner) return;
+      broadcastBanner.textContent = message;
+      broadcastBanner.classList.add('show');
+      window.setTimeout(() => {
+        broadcastBanner.classList.remove('show');
+      }, duration);
     }
 
     function loadYouTubeApi() {

@@ -11,6 +11,14 @@ export default function App() {
   const [currentPage, setCurrentPage] = React.useState(initialPage)
   const [roomNumber, setRoomNumber] = React.useState('')
 
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem('classroomBackendUrl', BACKEND_URL)
+    } catch {
+      // Ignore storage failures and rely on the query param fallback.
+    }
+  }, [])
+
   const navigateToPage = (page) => {
     setCurrentPage(page)
     const url = new URL(window.location.href)
