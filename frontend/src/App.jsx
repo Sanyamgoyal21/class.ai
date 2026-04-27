@@ -5,10 +5,20 @@ import CameraMonitor from './Pages/CameraMonitor.jsx'
 import DoubtCanvas from './Pages/DoubtCanvas.jsx'
 import './App.css'
 
+const SUPERNODE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
+
 export default function App() {
   const initialPage = new URLSearchParams(window.location.search).get('page') || 'launcher'
   const [currentPage, setCurrentPage] = React.useState(initialPage)
   const [roomNumber, setRoomNumber] = React.useState('')
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('supernodeUrl', SUPERNODE_URL)
+    } catch {
+      // Ignore storage failures and keep runtime fallback behavior.
+    }
+  }, [])
 
   const navigateToPage = (page) => {
     setCurrentPage(page)
@@ -27,7 +37,10 @@ export default function App() {
     event.preventDefault()
     const trimmedRoom = roomNumber.trim()
     if (!trimmedRoom) return
-    window.location.href = `/classroom.html?name=${encodeURIComponent(trimmedRoom)}`
+    const classroomUrl = new URL('/classroom.html', window.location.origin)
+    classroomUrl.searchParams.set('name', trimmedRoom)
+    classroomUrl.searchParams.set('backend', SUPERNODE_URL)
+    window.location.href = classroomUrl.toString()
   }
 
   // DoubtCanvas is fullscreen - no nav
