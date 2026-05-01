@@ -8,6 +8,7 @@ import sys
 import time
 import threading
 import cv2
+import numpy as np
 from datetime import datetime
 from contextlib import contextmanager
 
@@ -720,32 +721,45 @@ class ClassroomRunner:
 
         faces_info = []
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        locations = face_recognition.face_locations(rgb)
-        encodings = face_recognition.face_encodings(rgb, locations)
+        if hasattr(self._recognizer, "_detect_face_locations"):
+            locations = self._recognizer._detect_face_locations(frame)
+        else:
+            locations = face_recognition.face_locations(rgb)
+        encodings = face_recognition.face_encodings(
+            rgb,
+            locations,
+            num_jitters=max(1, getattr(self._recognizer, "face_encoding_jitters", 1)),
+        )
 
         known_encodings = getattr(self._recognizer, 'known_encodings', [])
         known_names = getattr(self._recognizer, 'known_names', [])
+        tolerance = getattr(self._recognizer, 'tolerance', 0.6)
+        min_face_area = getattr(self._recognizer, 'min_face_area', 0)
 
         for enc, loc in zip(encodings, locations):
             name = "Unknown"
             confidence = 0.0
 
             if known_encodings:
-                matches = face_recognition.compare_faces(known_encodings, enc)
-                if True in matches:
-                    idx = matches.index(True)
-                    if idx < len(known_names):
+                distances = face_recognition.face_distance(known_encodings, enc)
+                if len(distances) > 0:
+                    idx = int(np.argmin(distances))
+                    best_dist = float(distances[idx])
+                    if best_dist <= tolerance and idx < len(known_names):
                         name = known_names[idx]
-                    distances = face_recognition.face_distance(known_encodings, enc)
-                    confidence = 1.0 - min(distances)
+                        confidence = max(0.0, 1.0 - best_dist)
 
             top, right, bottom, left = loc
+            area = (right - left) * (bottom - top)
+            if area < min_face_area:
+                continue
+
             center = ((left + right) // 2, (top + bottom) // 2)
             faces_info.append({
                 "name": name,
                 "bbox": loc,
                 "confidence": confidence,
-                "area": (right - left) * (bottom - top),
+                "area": area,
                 "center": center,
             })
 

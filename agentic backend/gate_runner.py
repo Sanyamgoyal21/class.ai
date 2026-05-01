@@ -8,6 +8,7 @@ import sys
 import time
 import threading
 import cv2
+import numpy as np
 from datetime import datetime
 
 # Add parent directory to path for imports
@@ -166,31 +167,41 @@ class GateCameraRunner:
         if self._recognizer.use_fr:
             import face_recognition
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            locations = face_recognition.face_locations(rgb)
-            encodings = face_recognition.face_encodings(rgb, locations)
+            if hasattr(self._recognizer, "_detect_face_locations"):
+                locations = self._recognizer._detect_face_locations(frame)
+            else:
+                locations = face_recognition.face_locations(rgb)
+            encodings = face_recognition.face_encodings(
+                rgb,
+                locations,
+                num_jitters=max(1, getattr(self._recognizer, "face_encoding_jitters", 1)),
+            )
 
             for enc, loc in zip(encodings, locations):
-                matches = face_recognition.compare_faces(
-                    self._recognizer.known_encodings, enc
-                )
                 name = "Unknown"
                 confidence = 0.0
 
-                if True in matches:
-                    idx = matches.index(True)
-                    name = self._recognizer.known_names[idx]
-                    # Calculate confidence based on face distance
+                if self._recognizer.known_encodings:
                     distances = face_recognition.face_distance(
                         self._recognizer.known_encodings, enc
                     )
-                    confidence = 1.0 - min(distances)
+                    if len(distances) > 0:
+                        idx = int(np.argmin(distances))
+                        best_dist = float(distances[idx])
+                        if best_dist <= getattr(self._recognizer, "tolerance", 0.6):
+                            name = self._recognizer.known_names[idx]
+                            confidence = max(0.0, 1.0 - best_dist)
 
                 top, right, bottom, left = loc
+                area = (right - left) * (bottom - top)
+                if area < getattr(self._recognizer, "min_face_area", 0):
+                    continue
+
                 faces_info.append({
                     "name": name,
                     "bbox": loc,
                     "confidence": confidence,
-                    "area": (right - left) * (bottom - top),
+                    "area": area,
                 })
         else:
             # LBPH fallback
