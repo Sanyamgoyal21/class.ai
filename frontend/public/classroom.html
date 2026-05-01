@@ -446,7 +446,6 @@
   <script>
     // =================== CONFIGURATION ===================
 
-<<<<<<< HEAD
     const DEAD_REMOTE_HOSTS = new Set(['class-ai-backend.onrender.com']);
 
     function normalizeUrl(value) {
@@ -493,33 +492,6 @@
     }
 
     const SUPERNODE_URL = resolveBackendUrl();
-=======
-    // Get classroom name from URL params: ?name=Room101
-    const urlParams = new URLSearchParams(window.location.search);
-
-    function resolveSupernodeUrl() {
-      const explicitUrl = window.SUPERNODE_URL || urlParams.get('backend');
-      if (explicitUrl) return explicitUrl;
-
-      try {
-        const savedUrl = localStorage.getItem('supernodeUrl');
-        if (savedUrl) return savedUrl;
-      } catch {
-        // Ignore storage failures and use hostname fallback.
-      }
-
-      const isLocalHost = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
-      return isLocalHost ? 'http://localhost:5000' : 'https://class-ai-backend.onrender.com';
-    }
-
-    const SUPERNODE_URL = resolveSupernodeUrl();
-
-    try {
-      localStorage.setItem('supernodeUrl', SUPERNODE_URL);
-    } catch {
-      // Ignore storage failures and continue with the resolved URL.
-    }
->>>>>>> f729f70c1be5b521f354eb6f8212d8ea26ee3c3d
 
     // Local Ollama configuration (runs on the classroom device)
     const OLLAMA_URL = window.OLLAMA_URL || 'http://localhost:11434';
