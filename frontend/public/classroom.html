@@ -1720,7 +1720,7 @@ If no context is available, answer the question to the best of your ability.`;
             url: currentVideoUrl,
             time: snapTime || currentVideoTime,
           }));
-          window.location.href = `/?page=doubt&room=${encodeURIComponent(CLASSROOM_NAME)}`;
+          window.location.href = `/?page=doubt&room=${encodeURIComponent(CLASSROOM_NAME)}&backend=${encodeURIComponent(SUPERNODE_URL)}`;
         }
       };
 

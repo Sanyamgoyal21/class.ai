@@ -131,6 +131,18 @@ function generateCircle(context) {
   return [el]
 }
 
+function generateDiamond(context) {
+  const { x, y } = context
+  const el = baseElement('diamond', x, y, 140, 100, {
+    strokeColor: '#b45309',
+    backgroundColor: '#fde68a',
+    fillStyle: 'solid',
+    strokeWidth: 2,
+  })
+  context.y += 170
+  return [el]
+}
+
 /**
  * Labels — places text values horizontally near the current cursor.
  * step.values = ["a", "b", "c"]
@@ -249,6 +261,7 @@ export function interpretStep(step, context) {
         case 'triangle':  return generateTriangle(context)
         case 'rectangle': return generateRectangle(context)
         case 'circle':    return generateCircle(context)
+        case 'diamond':   return generateDiamond(context)
         default:
           console.warn(`[DrawingEngine] Unknown draw shape: "${step.shape}"`)
           return []

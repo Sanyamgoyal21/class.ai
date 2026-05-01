@@ -17,7 +17,7 @@ async function callOpenRouter(systemPrompt, userMessage) {
   const res = await axios.post(
     "https://openrouter.ai/api/v1/chat/completions",
     {
-      model: "qwen/qwen3-8b",   // ← change this
+      model: process.env.QWEN_MODEL || "qwen/qwen3-8b",   // ← change this
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user",   content: userMessage },
@@ -52,6 +52,839 @@ function parseJsonResponse(raw) {
   const noThink = raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
   const cleaned = noThink.replace(/^```[a-z]*\n?/i, "").replace(/```$/i, "").trim();
   return JSON.parse(cleaned);
+}
+
+const TIMELINE_ACTIONS = new Set(["draw", "highlight", "connect", "erase", "label"]);
+
+function rectEntity(id, x, y, width, height, text, style = {}) {
+  return {
+    id,
+    kind: "rectangle",
+    x,
+    y,
+    width,
+    height,
+    text,
+    style: {
+      strokeColor: style.strokeColor || "#2563eb",
+      fillColor: style.fillColor || "#ffffff",
+      textColor: style.textColor || "#0f172a",
+    },
+  };
+}
+
+function ellipseEntity(id, x, y, width, height, text, style = {}) {
+  return {
+    id,
+    kind: "ellipse",
+    x,
+    y,
+    width,
+    height,
+    text,
+    style: {
+      strokeColor: style.strokeColor || "#2563eb",
+      fillColor: style.fillColor || "#ffffff",
+      textColor: style.textColor || "#0f172a",
+    },
+  };
+}
+
+function diamondEntity(id, x, y, width, height, text, style = {}) {
+  return {
+    id,
+    kind: "diamond",
+    x,
+    y,
+    width,
+    height,
+    text,
+    style: {
+      strokeColor: style.strokeColor || "#2563eb",
+      fillColor: style.fillColor || "#ffffff",
+      textColor: style.textColor || "#0f172a",
+    },
+  };
+}
+
+function triangleEntity(id, x, y, width, height, text, style = {}) {
+  return {
+    id,
+    kind: "triangle",
+    x,
+    y,
+    width,
+    height,
+    text,
+    style: {
+      strokeColor: style.strokeColor || "#2563eb",
+      fillColor: style.fillColor || "#ffffff",
+      textColor: style.textColor || "#0f172a",
+    },
+  };
+}
+
+function textEntity(id, x, y, text, style = {}) {
+  return {
+    id,
+    kind: "text",
+    x,
+    y,
+    text,
+    style: {
+      strokeColor: style.strokeColor || "#0f172a",
+      fontSize: style.fontSize || 28,
+      textAlign: style.textAlign || "center",
+    },
+  };
+}
+
+function lineEntity(id, x1, y1, x2, y2, text = "", style = {}) {
+  return {
+    id,
+    kind: "line",
+    x1,
+    y1,
+    x2,
+    y2,
+    text,
+    style: {
+      strokeColor: style.strokeColor || "#2563eb",
+      textColor: style.textColor || "#64748b",
+    },
+  };
+}
+
+function connectorEntity(id, from, to, text = "", style = {}) {
+  return {
+    id,
+    kind: "connector",
+    from,
+    to,
+    text,
+    style: {
+      strokeColor: style.strokeColor || "#64748b",
+      textColor: style.textColor || "#64748b",
+      arrow: style.arrow !== false,
+    },
+  };
+}
+
+function estimateSpeechDurationMs(text = "") {
+  const words = String(text).trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(2400, Math.min(7000, words * 360));
+}
+
+function buildLessonPlanFromTemplate(question, template) {
+  const timeline = (template.steps || []).map((step, index) => {
+    const speechText = String(step.speech_text || "").trim();
+    const estimated_duration_ms = estimateSpeechDurationMs(speechText);
+    return {
+      step_number: index + 1,
+      speech_text: speechText,
+      estimated_duration_ms,
+      ops: Array.isArray(step.ops) ? step.ops : [],
+    };
+  });
+
+  return {
+    topic: question.trim(),
+    mode: "timeline",
+    plan_version: 1,
+    template_id: template.template_id,
+    speech: {
+      segments: timeline.map((step) => ({
+        step_number: step.step_number,
+        speech_text: step.speech_text,
+        estimated_duration_ms: step.estimated_duration_ms,
+      })),
+    },
+    timeline,
+    board_template: {
+      entities: template.entities,
+    },
+  };
+}
+
+function lessonTemplateRegistry(question = "") {
+  const keyTerm = extractKeyTerm(question);
+
+  return {
+    "science.photosynthesis.v1": {
+      template_id: "science.photosynthesis.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 70, "Photosynthesis", { fontSize: 34 }),
+        sun_icon: ellipseEntity("sun_icon", 130, 120, 120, 120, "Sun", { strokeColor: "#f59e0b", fillColor: "#fef3c7" }),
+        plant_body: rectEntity("plant_body", 360, 210, 180, 110, "Plant", { strokeColor: "#16a34a", fillColor: "#dcfce7" }),
+        water_box: rectEntity("water_box", 120, 350, 150, 74, "Water", { strokeColor: "#0ea5e9", fillColor: "#e0f2fe" }),
+        carbon_box: rectEntity("carbon_box", 620, 170, 170, 74, "Carbon dioxide", { strokeColor: "#64748b", fillColor: "#f8fafc" }),
+        oxygen_box: rectEntity("oxygen_box", 630, 320, 150, 74, "Oxygen", { strokeColor: "#38bdf8", fillColor: "#e0f2fe" }),
+        glucose_box: rectEntity("glucose_box", 350, 390, 200, 74, "Glucose food", { strokeColor: "#f97316", fillColor: "#ffedd5" }),
+        sunlight_link: connectorEntity("sunlight_link", "sun_icon", "plant_body", "sunlight", { strokeColor: "#f59e0b", textColor: "#92400e" }),
+        water_link: connectorEntity("water_link", "water_box", "plant_body", "water", { strokeColor: "#0ea5e9" }),
+        carbon_link: connectorEntity("carbon_link", "carbon_box", "plant_body", "CO2", { strokeColor: "#64748b" }),
+        oxygen_link: connectorEntity("oxygen_link", "plant_body", "oxygen_box", "O2", { strokeColor: "#38bdf8" }),
+      },
+      steps: [
+        {
+          speech_text: "Photosynthesis is the way plants make their own food.",
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "plant_body" },
+            { action: "draw", entity: "sun_icon" },
+            { action: "highlight", entity: "plant_body" },
+          ],
+        },
+        {
+          speech_text: "The plant takes in sunlight, water, and carbon dioxide as its main inputs.",
+          ops: [
+            { action: "draw", entity: "water_box" },
+            { action: "draw", entity: "carbon_box" },
+            { action: "connect", entity: "sunlight_link" },
+            { action: "connect", entity: "water_link" },
+            { action: "connect", entity: "carbon_link" },
+          ],
+        },
+        {
+          speech_text: "Using those inputs, the plant makes glucose for food and releases oxygen back into the air.",
+          ops: [
+            { action: "draw", entity: "glucose_box" },
+            { action: "draw", entity: "oxygen_box" },
+            { action: "connect", entity: "oxygen_link" },
+            { action: "highlight", entity: "glucose_box" },
+            { action: "highlight", entity: "oxygen_box" },
+          ],
+        },
+      ],
+    },
+    "science.water_cycle.v1": {
+      template_id: "science.water_cycle.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 70, "Water Cycle", { fontSize: 34 }),
+        sun_icon: ellipseEntity("sun_icon", 120, 110, 110, 110, "Sun", { strokeColor: "#f59e0b", fillColor: "#fef3c7" }),
+        water_body: rectEntity("water_body", 260, 380, 230, 76, "Lake / Ocean", { strokeColor: "#0ea5e9", fillColor: "#dbeafe" }),
+        cloud_box: rectEntity("cloud_box", 500, 120, 190, 74, "Clouds", { strokeColor: "#94a3b8", fillColor: "#f8fafc" }),
+        land_box: rectEntity("land_box", 610, 370, 160, 76, "Land", { strokeColor: "#65a30d", fillColor: "#ecfccb" }),
+        evaporation_link: connectorEntity("evaporation_link", "water_body", "cloud_box", "evaporation", { strokeColor: "#0ea5e9" }),
+        condensation_link: connectorEntity("condensation_link", "sun_icon", "cloud_box", "condensation", { strokeColor: "#64748b" }),
+        precipitation_link: connectorEntity("precipitation_link", "cloud_box", "land_box", "rain", { strokeColor: "#1d4ed8" }),
+        collection_link: connectorEntity("collection_link", "land_box", "water_body", "collection", { strokeColor: "#059669" }),
+      },
+      steps: [
+        {
+          speech_text: "The water cycle is the journey water takes as it moves around Earth.",
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "water_body" },
+            { action: "draw", entity: "cloud_box" },
+            { action: "draw", entity: "sun_icon" },
+          ],
+        },
+        {
+          speech_text: "Heat from the sun makes water evaporate and rise up, where it cools and forms clouds.",
+          ops: [
+            { action: "connect", entity: "evaporation_link" },
+            { action: "connect", entity: "condensation_link" },
+            { action: "highlight", entity: "cloud_box" },
+          ],
+        },
+        {
+          speech_text: "Then precipitation falls back to land and water collects again, so the cycle keeps repeating.",
+          ops: [
+            { action: "draw", entity: "land_box" },
+            { action: "connect", entity: "precipitation_link" },
+            { action: "connect", entity: "collection_link" },
+            { action: "highlight", entity: "water_body" },
+          ],
+        },
+      ],
+    },
+    "biology.human_heart.v1": {
+      template_id: "biology.human_heart.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 70, "Human Heart", { fontSize: 34 }),
+        heart_box: rectEntity("heart_box", 350, 200, 180, 120, "Heart", { strokeColor: "#dc2626", fillColor: "#fee2e2" }),
+        lungs_box: rectEntity("lungs_box", 120, 170, 170, 82, "Lungs", { strokeColor: "#0ea5e9", fillColor: "#e0f2fe" }),
+        body_box: rectEntity("body_box", 620, 250, 170, 82, "Body", { strokeColor: "#8b5cf6", fillColor: "#ede9fe" }),
+        deoxy_link: connectorEntity("deoxy_link", "body_box", "heart_box", "low oxygen blood", { strokeColor: "#2563eb" }),
+        lungs_link: connectorEntity("lungs_link", "heart_box", "lungs_box", "to lungs", { strokeColor: "#0ea5e9" }),
+        oxy_link: connectorEntity("oxy_link", "lungs_box", "heart_box", "oxygen-rich blood", { strokeColor: "#dc2626" }),
+        body_return: connectorEntity("body_return", "heart_box", "body_box", "to body", { strokeColor: "#dc2626" }),
+      },
+      steps: [
+        {
+          speech_text: "The heart is a strong pump that keeps blood moving through the whole body.",
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "heart_box" },
+            { action: "highlight", entity: "heart_box" },
+          ],
+        },
+        {
+          speech_text: "Blood travels from the body to the heart, and then the heart sends it to the lungs to pick up oxygen.",
+          ops: [
+            { action: "draw", entity: "body_box" },
+            { action: "draw", entity: "lungs_box" },
+            { action: "connect", entity: "deoxy_link" },
+            { action: "connect", entity: "lungs_link" },
+          ],
+        },
+        {
+          speech_text: "After getting oxygen in the lungs, the blood returns to the heart and is pumped back out to the body.",
+          ops: [
+            { action: "connect", entity: "oxy_link" },
+            { action: "connect", entity: "body_return" },
+            { action: "highlight", entity: "body_box" },
+          ],
+        },
+      ],
+    },
+    "physics.solar_system.v1": {
+      template_id: "physics.solar_system.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 66, "Solar System", { fontSize: 34 }),
+        sun_box: ellipseEntity("sun_box", 90, 210, 130, 130, "Sun", { strokeColor: "#f59e0b", fillColor: "#fef3c7" }),
+        mercury: ellipseEntity("mercury", 280, 160, 78, 78, "Mercury", { strokeColor: "#94a3b8", fillColor: "#f8fafc" }),
+        venus: ellipseEntity("venus", 390, 145, 84, 84, "Venus", { strokeColor: "#f97316", fillColor: "#ffedd5" }),
+        earth: ellipseEntity("earth", 510, 135, 90, 90, "Earth", { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        mars: ellipseEntity("mars", 620, 150, 82, 82, "Mars", { strokeColor: "#dc2626", fillColor: "#fee2e2" }),
+        jupiter: ellipseEntity("jupiter", 320, 310, 110, 110, "Jupiter", { strokeColor: "#b45309", fillColor: "#fef3c7" }),
+        saturn: ellipseEntity("saturn", 480, 300, 112, 112, "Saturn", { strokeColor: "#a16207", fillColor: "#fef9c3" }),
+        uranus: ellipseEntity("uranus", 640, 310, 96, 96, "Uranus", { strokeColor: "#0891b2", fillColor: "#cffafe" }),
+        neptune: ellipseEntity("neptune", 760, 320, 96, 96, "Neptune", { strokeColor: "#1d4ed8", fillColor: "#dbeafe" }),
+      },
+      steps: [
+        {
+          speech_text: "The solar system is made of the Sun at the center and planets moving around it.",
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "sun_box" },
+            { action: "highlight", entity: "sun_box" },
+          ],
+        },
+        {
+          speech_text: "The inner planets are Mercury, Venus, Earth, and Mars, which stay closer to the Sun.",
+          ops: [
+            { action: "draw", entity: "mercury" },
+            { action: "draw", entity: "venus" },
+            { action: "draw", entity: "earth" },
+            { action: "draw", entity: "mars" },
+            { action: "highlight", entity: "earth" },
+          ],
+        },
+        {
+          speech_text: "Farther out are the large outer planets like Jupiter and Saturn, followed by Uranus and Neptune.",
+          ops: [
+            { action: "draw", entity: "jupiter" },
+            { action: "draw", entity: "saturn" },
+            { action: "draw", entity: "uranus" },
+            { action: "draw", entity: "neptune" },
+          ],
+        },
+      ],
+    },
+    "math.pythagoras.v1": {
+      template_id: "math.pythagoras.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 70, "Pythagoras Theorem", { fontSize: 34 }),
+        side_a: lineEntity("side_a", 250, 360, 480, 360, "a", { strokeColor: "#2563eb" }),
+        side_b: lineEntity("side_b", 250, 360, 250, 170, "b", { strokeColor: "#059669" }),
+        side_c: lineEntity("side_c", 250, 170, 480, 360, "c", { strokeColor: "#f59e0b", textColor: "#b45309" }),
+        formula_box: rectEntity("formula_box", 560, 200, 180, 86, "a^2 + b^2 = c^2", { strokeColor: "#7c3aed", fillColor: "#f3e8ff" }),
+      },
+      steps: [
+        {
+          speech_text: "Pythagoras theorem works on a right triangle with two shorter sides and one longest side called the hypotenuse.",
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "side_a" },
+            { action: "draw", entity: "side_b" },
+            { action: "draw", entity: "side_c" },
+            { action: "highlight", entity: "side_c" },
+          ],
+        },
+        {
+          speech_text: "If the shorter sides are a and b, and the hypotenuse is c, then their squares follow a simple relationship.",
+          ops: [
+            { action: "highlight", entity: "side_a" },
+            { action: "highlight", entity: "side_b" },
+          ],
+        },
+        {
+          speech_text: "That relationship is a squared plus b squared equals c squared.",
+          ops: [
+            { action: "draw", entity: "formula_box" },
+            { action: "highlight", entity: "formula_box" },
+          ],
+        },
+      ],
+    },
+    "physics.newtons_laws.v1": {
+      template_id: "physics.newtons_laws.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 430, 68, "Newton's Laws", { fontSize: 34 }),
+        law1: rectEntity("law1", 90, 180, 220, 110, "1st Law\nstay at rest or motion", { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        law2: rectEntity("law2", 340, 180, 220, 110, "2nd Law\nforce = mass x acceleration", { strokeColor: "#059669", fillColor: "#dcfce7" }),
+        law3: rectEntity("law3", 590, 180, 220, 110, "3rd Law\naction and reaction", { strokeColor: "#f97316", fillColor: "#ffedd5" }),
+        push_arrow: connectorEntity("push_arrow", "law2", "law3", "forces act in pairs", { strokeColor: "#dc2626" }),
+      },
+      steps: [
+        {
+          speech_text: "Newton's first law says an object keeps doing what it is already doing unless a force changes it.",
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "law1" },
+            { action: "highlight", entity: "law1" },
+          ],
+        },
+        {
+          speech_text: "The second law explains that more force causes more acceleration, while more mass makes acceleration harder.",
+          ops: [
+            { action: "draw", entity: "law2" },
+            { action: "highlight", entity: "law2" },
+          ],
+        },
+        {
+          speech_text: "The third law says every action has an equal and opposite reaction.",
+          ops: [
+            { action: "draw", entity: "law3" },
+            { action: "connect", entity: "push_arrow" },
+            { action: "highlight", entity: "law3" },
+          ],
+        },
+      ],
+    },
+    "cs.dsu.v1": {
+      template_id: "cs.dsu.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 70, "Disjoint Set Union", { fontSize: 34 }),
+        set_a: ellipseEntity("set_a", 150, 210, 96, 96, "1", { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        set_b: ellipseEntity("set_b", 320, 210, 96, 96, "2", { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        set_c: ellipseEntity("set_c", 490, 210, 96, 96, "3", { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        root_node: ellipseEntity("root_node", 360, 360, 110, 110, "Root", { strokeColor: "#16a34a", fillColor: "#dcfce7" }),
+        union_left: connectorEntity("union_left", "set_a", "root_node", "union", { strokeColor: "#16a34a" }),
+        union_mid: connectorEntity("union_mid", "set_b", "root_node", "union", { strokeColor: "#16a34a" }),
+        union_right: connectorEntity("union_right", "set_c", "root_node", "union", { strokeColor: "#16a34a" }),
+        find_label: textEntity("find_label", 640, 360, "find() returns the root", { fontSize: 24, strokeColor: "#7c3aed" }),
+      },
+      steps: [
+        {
+          speech_text: "Disjoint Set Union starts by treating each element as its own separate set.",
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "set_a" },
+            { action: "draw", entity: "set_b" },
+            { action: "draw", entity: "set_c" },
+          ],
+        },
+        {
+          speech_text: "When we union elements, we connect their sets under one common representative root.",
+          ops: [
+            { action: "draw", entity: "root_node" },
+            { action: "connect", entity: "union_left" },
+            { action: "connect", entity: "union_mid" },
+            { action: "connect", entity: "union_right" },
+            { action: "highlight", entity: "root_node" },
+          ],
+        },
+        {
+          speech_text: "A find operation follows the parent links until it reaches that shared root.",
+          ops: [
+            { action: "label", entity: "find_label" },
+            { action: "highlight", entity: "set_b" },
+            { action: "highlight", entity: "root_node" },
+          ],
+        },
+      ],
+    },
+    "cs.dfs.v1": {
+      template_id: "cs.dfs.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 70, "Depth First Search", { fontSize: 34 }),
+        node_a: ellipseEntity("node_a", 210, 170, 90, 90, "A", { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        node_b: ellipseEntity("node_b", 380, 170, 90, 90, "B", { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        node_c: ellipseEntity("node_c", 550, 170, 90, 90, "C", { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        node_d: ellipseEntity("node_d", 380, 330, 90, 90, "D", { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        edge_ab: connectorEntity("edge_ab", "node_a", "node_b", "", { strokeColor: "#64748b" }),
+        edge_bc: connectorEntity("edge_bc", "node_b", "node_c", "", { strokeColor: "#64748b" }),
+        edge_bd: connectorEntity("edge_bd", "node_b", "node_d", "", { strokeColor: "#64748b" }),
+        path_label: textEntity("path_label", 650, 340, "Go deep before backtracking", { fontSize: 24, strokeColor: "#7c3aed" }),
+      },
+      steps: [
+        {
+          speech_text: "Depth first search begins at one node and keeps moving deeper along a path.",
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "node_a" },
+            { action: "draw", entity: "node_b" },
+            { action: "connect", entity: "edge_ab" },
+            { action: "highlight", entity: "node_a" },
+          ],
+        },
+        {
+          speech_text: "Instead of exploring every nearby node first, DFS follows one branch as far as it can go.",
+          ops: [
+            { action: "draw", entity: "node_c" },
+            { action: "draw", entity: "node_d" },
+            { action: "connect", entity: "edge_bc" },
+            { action: "connect", entity: "edge_bd" },
+            { action: "highlight", entity: "node_c" },
+          ],
+        },
+        {
+          speech_text: "Only after reaching the end of a branch does it backtrack and try a different path.",
+          ops: [
+            { action: "label", entity: "path_label" },
+            { action: "highlight", entity: "node_d" },
+            { action: "highlight", entity: "node_b" },
+          ],
+        },
+      ],
+    },
+    "math.fractions.v1": {
+      template_id: "math.fractions.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 68, "Fractions", { fontSize: 34 }),
+        whole_box: rectEntity("whole_box", 180, 180, 220, 110, "One whole", { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        part_box: rectEntity("part_box", 470, 180, 220, 110, "Equal parts", { strokeColor: "#059669", fillColor: "#dcfce7" }),
+        fraction_box: rectEntity("fraction_box", 330, 340, 220, 90, "3/4", { strokeColor: "#f97316", fillColor: "#ffedd5" }),
+        whole_to_parts: connectorEntity("whole_to_parts", "whole_box", "part_box", "split into equal parts", { strokeColor: "#64748b" }),
+      },
+      steps: [
+        {
+          speech_text: "A fraction shows parts of a whole.",
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "whole_box" },
+          ],
+        },
+        {
+          speech_text: "The whole is split into equal parts so we can count how many parts we have.",
+          ops: [
+            { action: "draw", entity: "part_box" },
+            { action: "connect", entity: "whole_to_parts" },
+          ],
+        },
+        {
+          speech_text: "For example, three out of four equal parts is written as three over four.",
+          ops: [
+            { action: "draw", entity: "fraction_box" },
+            { action: "highlight", entity: "fraction_box" },
+          ],
+        },
+      ],
+    },
+    "math.algebra_basics.v1": {
+      template_id: "math.algebra_basics.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 68, "Algebra Basics", { fontSize: 34 }),
+        variable_box: rectEntity("variable_box", 180, 180, 180, 90, "x", { strokeColor: "#7c3aed", fillColor: "#f3e8ff" }),
+        number_box: rectEntity("number_box", 440, 180, 180, 90, "5", { strokeColor: "#0ea5e9", fillColor: "#e0f2fe" }),
+        equation_box: rectEntity("equation_box", 300, 330, 260, 90, "x + 5 = 12", { strokeColor: "#16a34a", fillColor: "#dcfce7" }),
+      },
+      steps: [
+        {
+          speech_text: "Algebra uses letters like x to stand for unknown values.",
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "variable_box" },
+          ],
+        },
+        {
+          speech_text: "Those variables can be combined with numbers to make expressions and equations.",
+          ops: [
+            { action: "draw", entity: "number_box" },
+            { action: "draw", entity: "equation_box" },
+          ],
+        },
+        {
+          speech_text: "Solving algebra means finding the value that makes the equation true.",
+          ops: [
+            { action: "highlight", entity: "variable_box" },
+            { action: "highlight", entity: "equation_box" },
+          ],
+        },
+      ],
+    },
+    "generic.concept_box.v1": {
+      template_id: "generic.concept_box.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 70, keyTerm, { fontSize: 34 }),
+        core_box: ellipseEntity("core_box", 310, 190, 220, 100, keyTerm, { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        detail_left: diamondEntity("detail_left", 90, 340, 210, 84, "What it is", { strokeColor: "#059669", fillColor: "#dcfce7" }),
+        detail_right: triangleEntity("detail_right", 560, 340, 210, 84, "Why it matters", { strokeColor: "#f97316", fillColor: "#ffedd5" }),
+        left_link: connectorEntity("left_link", "core_box", "detail_left", "meaning", { strokeColor: "#059669" }),
+        right_link: connectorEntity("right_link", "core_box", "detail_right", "use", { strokeColor: "#f97316" }),
+      },
+      steps: [
+        {
+          speech_text: `${keyTerm} becomes easier when we first identify the main idea clearly.`,
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "core_box" },
+            { action: "highlight", entity: "core_box" },
+          ],
+        },
+        {
+          speech_text: "Then we can describe what it means in simple words.",
+          ops: [
+            { action: "draw", entity: "detail_left" },
+            { action: "connect", entity: "left_link" },
+          ],
+        },
+        {
+          speech_text: "Finally, we connect that idea to why it matters or where it is used.",
+          ops: [
+            { action: "draw", entity: "detail_right" },
+            { action: "connect", entity: "right_link" },
+          ],
+        },
+      ],
+    },
+    "generic.process_flow.v1": {
+      template_id: "generic.process_flow.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 70, keyTerm, { fontSize: 34 }),
+        stage_1: ellipseEntity("stage_1", 90, 220, 190, 88, "Start", { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        stage_2: diamondEntity("stage_2", 330, 220, 190, 88, "Middle", { strokeColor: "#059669", fillColor: "#dcfce7" }),
+        stage_3: rectEntity("stage_3", 570, 220, 190, 88, "Result", { strokeColor: "#f97316", fillColor: "#ffedd5" }),
+        flow_1: connectorEntity("flow_1", "stage_1", "stage_2", "step 1", { strokeColor: "#64748b" }),
+        flow_2: connectorEntity("flow_2", "stage_2", "stage_3", "step 2", { strokeColor: "#64748b" }),
+      },
+      steps: [
+        {
+          speech_text: `${keyTerm} can be understood as a process with a clear beginning.`,
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "stage_1" },
+          ],
+        },
+        {
+          speech_text: "Next, the important change happens in the middle of the process.",
+          ops: [
+            { action: "draw", entity: "stage_2" },
+            { action: "connect", entity: "flow_1" },
+          ],
+        },
+        {
+          speech_text: "At the end, we get the final result and can trace how each stage connects.",
+          ops: [
+            { action: "draw", entity: "stage_3" },
+            { action: "connect", entity: "flow_2" },
+            { action: "highlight", entity: "stage_3" },
+          ],
+        },
+      ],
+    },
+    "generic.labeled_system.v1": {
+      template_id: "generic.labeled_system.v1",
+      entities: {
+        topic_title: textEntity("topic_title", 420, 70, keyTerm, { fontSize: 34 }),
+        system_box: ellipseEntity("system_box", 320, 210, 220, 110, keyTerm, { strokeColor: "#2563eb", fillColor: "#dbeafe" }),
+        label_a: rectEntity("label_a", 90, 170, 180, 74, "Part A", { strokeColor: "#059669", fillColor: "#dcfce7" }),
+        label_b: diamondEntity("label_b", 590, 170, 180, 74, "Part B", { strokeColor: "#f97316", fillColor: "#ffedd5" }),
+        label_c: ellipseEntity("label_c", 330, 380, 200, 74, "Main output", { strokeColor: "#7c3aed", fillColor: "#f3e8ff" }),
+        link_a: connectorEntity("link_a", "label_a", "system_box", "", { strokeColor: "#059669" }),
+        link_b: connectorEntity("link_b", "label_b", "system_box", "", { strokeColor: "#f97316" }),
+        link_c: connectorEntity("link_c", "system_box", "label_c", "", { strokeColor: "#7c3aed" }),
+      },
+      steps: [
+        {
+          speech_text: `${keyTerm} can be explained by focusing on the main system first.`,
+          ops: [
+            { action: "label", entity: "topic_title" },
+            { action: "draw", entity: "system_box" },
+            { action: "highlight", entity: "system_box" },
+          ],
+        },
+        {
+          speech_text: "Then we label the important parts that affect that system.",
+          ops: [
+            { action: "draw", entity: "label_a" },
+            { action: "draw", entity: "label_b" },
+            { action: "connect", entity: "link_a" },
+            { action: "connect", entity: "link_b" },
+          ],
+        },
+        {
+          speech_text: "Finally, we show the main result that comes out of the system.",
+          ops: [
+            { action: "draw", entity: "label_c" },
+            { action: "connect", entity: "link_c" },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function classifyTopic(question = "") {
+  const q = question.toLowerCase();
+
+  if (/\bphotosynthesis\b/.test(q)) return { templateId: "science.photosynthesis.v1", subject: "science", fallbackMode: "labeled_system" };
+  if (/\bwater cycle\b/.test(q)) return { templateId: "science.water_cycle.v1", subject: "science", fallbackMode: "process_flow" };
+  if (/\bhuman heart\b|\bheart\b/.test(q)) return { templateId: "biology.human_heart.v1", subject: "biology", fallbackMode: "labeled_system" };
+  if (/\bsolar system\b/.test(q)) return { templateId: "physics.solar_system.v1", subject: "physics", fallbackMode: "labeled_system" };
+  if (/\bpythagoras\b/.test(q)) return { templateId: "math.pythagoras.v1", subject: "math", fallbackMode: "concept_box" };
+  if (/\bnewton'?s laws?\b|\bnewtons laws?\b/.test(q)) return { templateId: "physics.newtons_laws.v1", subject: "physics", fallbackMode: "concept_box" };
+  if (/\bdisjoint set union\b|\bdsu\b/.test(q)) return { templateId: "cs.dsu.v1", subject: "computer_science", fallbackMode: "labeled_system" };
+  if (/\bdepth first search\b|\bdfs\b/.test(q)) return { templateId: "cs.dfs.v1", subject: "computer_science", fallbackMode: "process_flow" };
+  if (/\bfraction/.test(q)) return { templateId: "math.fractions.v1", subject: "math", fallbackMode: "concept_box" };
+  if (/\balgebra\b/.test(q)) return { templateId: "math.algebra_basics.v1", subject: "math", fallbackMode: "concept_box" };
+
+  if (/\bcycle\b|\bprocess\b/.test(q)) return { templateId: null, subject: "generic", fallbackMode: "process_flow" };
+  if (/\bsystem\b|\bparts\b|\bdiagram\b|\bstructure\b/.test(q)) return { templateId: null, subject: "generic", fallbackMode: "labeled_system" };
+  return { templateId: null, subject: "generic", fallbackMode: "concept_box" };
+}
+
+function opTargetsValid(op, entities) {
+  if (!op || typeof op !== "object" || !TIMELINE_ACTIONS.has(op.action)) return false;
+  if (typeof op.entity !== "string" || !entities[op.entity]) return false;
+  return true;
+}
+
+function validateLessonPlan(plan) {
+  if (!plan || typeof plan !== "object") return null;
+  if (plan.mode !== "timeline") return null;
+  const entities = plan.board_template?.entities;
+  if (!entities || typeof entities !== "object") return null;
+  if (!Array.isArray(plan.timeline) || !plan.timeline.length) return null;
+
+  const safeTimeline = [];
+  for (const step of plan.timeline) {
+    if (!step || typeof step !== "object") return null;
+    const safeOps = Array.isArray(step.ops) ? step.ops.filter((op) => opTargetsValid(op, entities)) : [];
+    if (!safeOps.length && Array.isArray(step.ops) && step.ops.length) return null;
+    safeTimeline.push({
+      step_number: Number(step.step_number) || safeTimeline.length + 1,
+      speech_text: typeof step.speech_text === "string" && step.speech_text.trim() ? step.speech_text.trim() : "Let's understand this step.",
+      estimated_duration_ms: clampNumber(Number(step.estimated_duration_ms), estimateSpeechDurationMs(step.speech_text)),
+      ops: safeOps,
+    });
+  }
+
+  if (!safeTimeline.length) return null;
+
+  return {
+    topic: typeof plan.topic === "string" ? plan.topic : "",
+    mode: "timeline",
+    plan_version: 1,
+    template_id: typeof plan.template_id === "string" && plan.template_id.trim() ? plan.template_id.trim() : "generic.concept_box.v1",
+    speech: {
+      segments: safeTimeline.map((step) => ({
+        step_number: step.step_number,
+        speech_text: step.speech_text,
+        estimated_duration_ms: step.estimated_duration_ms,
+      })),
+    },
+    board_template: { entities },
+    timeline: safeTimeline,
+  };
+}
+
+function buildFallbackLessonPlan(question) {
+  const { fallbackMode } = classifyTopic(question);
+  const registry = lessonTemplateRegistry(question);
+  const templateId = fallbackMode === "process_flow"
+    ? "generic.process_flow.v1"
+    : fallbackMode === "labeled_system"
+      ? "generic.labeled_system.v1"
+      : "generic.concept_box.v1";
+  return buildLessonPlanFromTemplate(question, registry[templateId]);
+}
+
+async function refineSpeechText(question, plan) {
+  if (!process.env.OPENROUTER_API_KEY || !plan?.timeline?.length) {
+    return plan;
+  }
+
+  try {
+    const systemPrompt = `You rewrite lesson plan speech for a classroom whiteboard tutor.
+
+Return ONLY valid JSON:
+{
+  "steps": [
+    { "step_number": 1, "speech_text": "..." }
+  ]
+}
+
+Rules:
+- Keep the same number of steps.
+- Do not change step order.
+- Use simple student-friendly English.
+- Each step should stay tightly matched to the existing board action.
+- Do not mention any new diagram parts.`;
+
+    const userPrompt = JSON.stringify({
+      question,
+      steps: plan.timeline.map((step) => ({
+        step_number: step.step_number,
+        speech_text: step.speech_text,
+        ops: step.ops,
+      })),
+    });
+
+    const raw = await callOpenRouter(systemPrompt, userPrompt);
+    const parsed = parseJsonResponse(raw);
+    const rewritten = Array.isArray(parsed.steps) ? parsed.steps : [];
+    if (!rewritten.length || rewritten.length !== plan.timeline.length) {
+      return plan;
+    }
+
+    const nextTimeline = plan.timeline.map((step, index) => {
+      const candidate = rewritten[index];
+      const speech_text = typeof candidate?.speech_text === "string" && candidate.speech_text.trim()
+        ? candidate.speech_text.trim()
+        : step.speech_text;
+      return {
+        ...step,
+        speech_text,
+        estimated_duration_ms: estimateSpeechDurationMs(speech_text),
+      };
+    });
+
+    return validateLessonPlan({
+      ...plan,
+      timeline: nextTimeline,
+      speech: {
+        segments: nextTimeline.map((step) => ({
+          step_number: step.step_number,
+          speech_text: step.speech_text,
+          estimated_duration_ms: step.estimated_duration_ms,
+        })),
+      },
+    }) || plan;
+  } catch (err) {
+    console.warn("[Planner] Speech refinement failed, using template defaults:", err.message);
+    return plan;
+  }
+}
+
+async function buildStructuredLessonPlan(question, feynmanMode = false) {
+  const registry = lessonTemplateRegistry(question);
+  const { templateId } = classifyTopic(question);
+
+  if (templateId && registry[templateId]) {
+    const basePlan = buildLessonPlanFromTemplate(question, registry[templateId]);
+    const validatedBase = validateLessonPlan(basePlan) || buildFallbackLessonPlan(question);
+    return refineSpeechText(question, validatedBase);
+  }
+
+  if (process.env.OPENROUTER_API_KEY) {
+    try {
+      const visualLesson = await runPlannerPipeline(question, feynmanMode);
+      const generatedPlan = buildLessonPlanFromVisualLesson(visualLesson, question);
+      const validatedGeneratedPlan = validateLessonPlan(generatedPlan);
+      if (validatedGeneratedPlan) {
+        return refineSpeechText(question, validatedGeneratedPlan);
+      }
+      console.warn("[Planner] Generated lesson plan failed validation, falling back to template plan.");
+    } catch (err) {
+      console.warn("[Planner] Planner pipeline failed, falling back to template plan:", err.message);
+    }
+  }
+
+  return buildFallbackLessonPlan(question);
 }
 
 const SUPPORTED_VISUAL_TYPES = new Set(["shape", "text", "line", "arrow"]);
@@ -369,6 +1202,125 @@ function buildVisualLesson(question, chat, visuals) {
     chat: safeChat,
     visuals: finalVisuals,
     sync: distributeVisualsAcrossSentences(sentences, finalVisuals),
+  };
+}
+
+function visualToTemplateEntity(visual) {
+  const x = clampNumber(Number(visual.position?.x), 240);
+  const y = clampNumber(Number(visual.position?.y), 180);
+  const color = normalizeVisualStyle(visual.style).color;
+  const highlight = Boolean(visual.style?.highlight);
+
+  if (visual.type === "shape") {
+    return {
+      id: visual.id,
+      kind: "rectangle",
+      x,
+      y,
+      width: 160,
+      height: 90,
+      text: String(visual.content || ""),
+      style: {
+        strokeColor: color,
+        fillColor: highlight ? "#eff6ff" : "#ffffff",
+        textColor: "#0f172a",
+      },
+    };
+  }
+
+  if (visual.type === "text") {
+    return {
+      id: visual.id,
+      kind: "text",
+      x,
+      y,
+      text: String(visual.content || visual.id),
+      style: {
+        strokeColor: color,
+        fontSize: highlight ? 32 : 24,
+        textAlign: "center",
+      },
+    };
+  }
+
+  if (visual.type === "line" || visual.type === "arrow") {
+    return {
+      id: visual.id,
+      kind: "line",
+      x1: x,
+      y1: y,
+      x2: x + 120,
+      y2: y,
+      text: String(visual.content || ""),
+      style: {
+        strokeColor: color,
+        textColor: "#64748b",
+        arrow: visual.type === "arrow",
+      },
+    };
+  }
+
+  return {
+    id: visual.id,
+    kind: "text",
+    x,
+    y,
+    text: String(visual.content || visual.id),
+    style: {
+      strokeColor: color,
+      fontSize: highlight ? 30 : 24,
+      textAlign: "center",
+    },
+  };
+}
+
+function buildLessonPlanFromVisualLesson(visualLesson, question) {
+  if (!visualLesson || typeof visualLesson !== "object") return null;
+
+  const visuals = Array.isArray(visualLesson.visuals) ? visualLesson.visuals : [];
+  const entities = Object.fromEntries(
+    visuals.map((visual) => [visual.id, visualToTemplateEntity(visual)]),
+  );
+
+  const sync = Array.isArray(visualLesson.sync) && visualLesson.sync.length
+    ? visualLesson.sync
+    : distributeVisualsAcrossSentences(splitChatIntoSentences(visualLesson.chat), visuals);
+
+  const timeline = sync.map((cue, index) => {
+    const cueVisuals = Array.isArray(cue.visuals) && cue.visuals.length
+      ? cue.visuals
+      : Array.isArray(cue.visualIndices)
+        ? cue.visualIndices.map((visualIndex) => visuals[visualIndex]).filter(Boolean)
+        : [];
+    const sentence = typeof cue.sentence === "string" && cue.sentence.trim()
+      ? cue.sentence.trim()
+      : `Step ${index + 1}.`;
+
+    return {
+      step_number: index + 1,
+      speech_text: sentence,
+      estimated_duration_ms: estimateSpeechDurationMs(sentence),
+      ops: [
+        ...cueVisuals.map((visual) => ({ action: "draw", entity: visual.id })),
+        ...(Array.isArray(cue.highlightIds) ? cue.highlightIds.map((entityId) => ({ action: "highlight", entity: entityId })) : []),
+      ],
+    };
+  });
+
+  return {
+    topic: typeof visualLesson.topic === "string" && visualLesson.topic.trim() ? visualLesson.topic.trim() : question.trim(),
+    mode: "timeline",
+    plan_version: 1,
+    template_id: "generated.visuals.v1",
+    speech: {
+      segments: timeline.map((step) => ({
+        step_number: step.step_number,
+        speech_text: step.speech_text,
+        estimated_duration_ms: step.estimated_duration_ms,
+      })),
+    },
+    board_template: { entities },
+    timeline,
   };
 }
 
@@ -1162,6 +2114,16 @@ Rules for visuals:
   }
 }
 
+async function runTimelineLessonPipeline(question, feynmanMode = false) {
+  try {
+    const plan = await buildStructuredLessonPlan(question.trim(), feynmanMode);
+    return validateLessonPlan(plan) || buildFallbackLessonPlan(question.trim());
+  } catch (err) {
+    console.warn("[Planner] Structured lesson pipeline failed, using fallback:", err.message);
+    return buildFallbackLessonPlan(question.trim());
+  }
+}
+
 const app = express();
 const httpServer = createServer(app);
 
@@ -1348,126 +2310,35 @@ app.get("/api/doubt/stream", async (req, res) => {
   let disconnected = false;
   req.on("close", () => disconnected = true);
 
-  // Detect if the question is algorithm-type before the full pipeline runs,
-  // so we can choose the right streaming mode early.
-  const wantsAlgo = shouldUseAlgorithm(question.trim());
-
-  try {
-    const parsed = await runPlannerPipeline(question.trim(), feynmanMode);
-
-    // ── Determine whether the pipeline produced an algorithm ──────────────────
-    // parsed.algorithm is set when runPlannerPipeline chose algorithm mode;
-    // we also fall back to the heuristic detection.
-    const algoPayload = parsed.algorithm || null;
-    const isAlgorithmLesson = Boolean(algoPayload) || wantsAlgo;
-
+  const sendLessonPlan = (plan) => {
     sseWrite(res, {
       type: "lesson_start",
       payload: {
-        topic: parsed.topic || question.trim(),
-        mode: isAlgorithmLesson ? "algorithm" : "visuals",
+        topic: plan.topic || question.trim(),
+        mode: plan.mode,
+        template_id: plan.template_id,
       },
     });
+    sseWrite(res, { type: "lesson_plan", payload: plan });
+    sseWrite(res, { type: "complete" });
+    res.end();
+  };
 
-    // ── Algorithm path ────────────────────────────────────────────────────────
-    if (isAlgorithmLesson) {
-      // Resolve the algorithm object: prefer what the pipeline produced,
-      // fall back to the heuristic algorithm for this question type.
-      const resolvedAlgo = algoPayload
-        ? validateAlgorithm(algoPayload)
-        : validateAlgorithm(fallbackAlgorithmForQuestion(question.trim(), inferAlgorithmType(question.trim())));
-
-      const finalAlgo = resolvedAlgo || fallbackAlgorithmForQuestion(question.trim(), inferAlgorithmType(question.trim()));
-
-      // Send the algorithm definition so the client can normalize steps.
-      sseWrite(res, { type: "algorithm_init", payload: finalAlgo });
-
-      const sentences = splitChatIntoSentences(parsed.chat || explainQuestionHeuristically(question.trim(), feynmanMode));
-      const stepCount = (finalAlgo.steps || []).length;
-
-      // Stream one chat sentence at a time, advancing algorithm steps in sync.
-      for (let i = 0; i < sentences.length; i++) {
-        if (disconnected) return;
-
-        sseWrite(res, { type: "chat_chunk", payload: sentences[i] });
-        await wait(80);
-
-        // Advance the visualizer proportionally through the steps.
-        const fraction = stepCount > 0 ? Math.min(1, (i + 1) / sentences.length) : 0;
-        sseWrite(res, { type: "algorithm_advance", payload: { fraction } });
-        await wait(120);
-      }
-
-      if (!disconnected) {
-        // Ensure we reach the final step.
-        if (stepCount > 0) {
-          sseWrite(res, { type: "algorithm_advance", payload: { fraction: 1 } });
-          await wait(80);
-        }
-        sseWrite(res, { type: "complete" });
-        res.end();
-      }
-      return;
-    }
-
-    // ── Visuals path (existing behavior) ─────────────────────────────────────
-    const cues = Array.isArray(parsed.sync) && parsed.sync.length
-      ? parsed.sync
-      : distributeVisualsAcrossSentences(splitChatIntoSentences(parsed.chat), parsed.visuals);
-
-    for (let i = 0; i < cues.length; i++) {
-      if (disconnected) return;
-
-      const cue = cues[i];
-      sseWrite(res, { type: "chat_chunk", payload: cue.sentence });
-      await wait(100);
-
-      sseWrite(res, {
-        type: "visual_chunk",
-        payload: {
-          sentenceIndex: cue.sentenceIndex,
-          visualIndices: cue.visualIndices,
-          visuals: cue.visuals,
-          highlightIds: cue.highlightIds,
-        },
-      });
-      await wait(180);
-    }
-
+  try {
+    const plan = await runTimelineLessonPipeline(question.trim(), feynmanMode);
+    if (disconnected) return;
+    sendLessonPlan(plan);
+    return;
+  } catch (timelineError) {
     if (!disconnected) {
-      sseWrite(res, { type: "complete" });
-      res.end();
+      console.error("Timeline doubt stream error:", timelineError.message);
+      const fallback = buildFallbackLessonPlan(question.trim());
+      sendLessonPlan(fallback);
     }
-
-  } catch (err) {
-    if (!disconnected) {
-      console.error("Doubt stream error:", err.message);
-      const fallback = buildDoubtFallback(question, err.message);
-
-      sseWrite(res, {
-        type: "lesson_start",
-        payload: { topic: question.trim(), mode: "visuals" },
-      });
-      const fallbackCues = Array.isArray(fallback.sync) && fallback.sync.length
-        ? fallback.sync
-        : distributeVisualsAcrossSentences(splitChatIntoSentences(fallback.chat), fallback.visuals);
-      for (const cue of fallbackCues) {
-        sseWrite(res, { type: "chat_chunk", payload: cue.sentence });
-        sseWrite(res, {
-          type: "visual_chunk",
-          payload: {
-            sentenceIndex: cue.sentenceIndex,
-            visualIndices: cue.visualIndices,
-            visuals: cue.visuals,
-            highlightIds: cue.highlightIds,
-          },
-        });
-      }
-      sseWrite(res, { type: "complete" });
-      res.end();
-    }
+    return;
   }
 });
+
 app.post("/api/doubt", async (req, res) => {
   try {
     const { question } = req.body;
@@ -1476,11 +2347,41 @@ app.post("/api/doubt", async (req, res) => {
       return res.status(400).json({ success: false, error: "question is required" });
     }
 
-    const data = await runPlannerPipeline(question.trim());
+    const data = await runTimelineLessonPipeline(question.trim());
     return res.json({ success: true, data });
   } catch (err) {
     console.error("Doubt API error:", err.message);
-    const fallback = buildDoubtFallback(req.body?.question, err.message);
+    const fallback = buildFallbackLessonPlan(req.body?.question || "Concept");
+    return res.json({ success: true, data: fallback, fallback: true });
+  }
+});
+
+app.get("/api/doubt", async (req, res) => {
+  try {
+    const question = typeof req.query.q === "string" && req.query.q.trim()
+      ? req.query.q.trim()
+      : typeof req.query.question === "string" && req.query.question.trim()
+        ? req.query.question.trim()
+        : "";
+
+    if (!question) {
+      return res.status(400).json({
+        success: false,
+        error: "question is required via ?q=... or ?question=...",
+      });
+    }
+
+    const data = await runTimelineLessonPipeline(question);
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error("Doubt GET API error:", err.message);
+    const fallback = buildFallbackLessonPlan(
+      typeof req.query.q === "string" && req.query.q.trim()
+        ? req.query.q.trim()
+        : typeof req.query.question === "string" && req.query.question.trim()
+          ? req.query.question.trim()
+          : "Concept"
+    );
     return res.json({ success: true, data: fallback, fallback: true });
   }
 });

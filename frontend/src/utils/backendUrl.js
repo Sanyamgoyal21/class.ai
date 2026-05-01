@@ -27,25 +27,46 @@ export function resolveBackendUrl() {
     return envUrl || 'http://localhost:5000'
   }
 
+  const queryBackendUrl = normalizeUrl(browserUrl.searchParams.get('backend'))
+  const storedBackendUrl =
+    normalizeUrl(window.sessionStorage?.getItem('classroomBackendUrl'))
+    || normalizeUrl(window.localStorage?.getItem('classroomBackendUrl'))
+  const configuredUrl = queryBackendUrl || storedBackendUrl || envUrl
   const browserIsLocal = isLocalHost(browserUrl.hostname)
 
-  if (browserIsLocal) {
-    if (envUrl) {
-      const envHost = new URL(envUrl).hostname
-      if (isLocalHost(envHost)) return envUrl
-      if (!DEAD_REMOTE_HOSTS.has(envHost)) return envUrl
+  if (configuredUrl) {
+    const configuredHost = new URL(configuredUrl).hostname
+
+    if (browserIsLocal) {
+      if (isLocalHost(configuredHost)) return configuredUrl
+      if (!DEAD_REMOTE_HOSTS.has(configuredHost)) return configuredUrl
+      return localBackendUrl
     }
 
-    return localBackendUrl
-  }
+    try {
+      window.sessionStorage?.setItem('classroomBackendUrl', configuredUrl)
+      window.localStorage?.setItem('classroomBackendUrl', configuredUrl)
+    } catch {
+      // Ignore storage write failures and keep using the resolved URL.
+    }
 
-  if (envUrl) return envUrl
+    return configuredUrl
+  }
 
   if (browserUrl.port && browserUrl.port !== '5000') {
     return localBackendUrl
   }
 
-  return browserUrl.origin.replace(/\/$/, '')
+  const inferredUrl = browserUrl.origin.replace(/\/$/, '')
+
+  try {
+    window.sessionStorage?.setItem('classroomBackendUrl', inferredUrl)
+    window.localStorage?.setItem('classroomBackendUrl', inferredUrl)
+  } catch {
+    // Ignore storage write failures and keep using the inferred URL.
+  }
+
+  return inferredUrl
 }
 
 export const BACKEND_URL = resolveBackendUrl()
