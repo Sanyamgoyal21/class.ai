@@ -6,6 +6,8 @@ import DoubtCanvas from './Pages/DoubtCanvas.jsx'
 import { BACKEND_URL } from './utils/backendUrl'
 import './App.css'
 
+const SUPERNODE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
+
 export default function App() {
   const initialPage = new URLSearchParams(window.location.search).get('page') || 'launcher'
   const [currentPage, setCurrentPage] = React.useState(initialPage)
@@ -13,9 +15,15 @@ export default function App() {
 
   React.useEffect(() => {
     try {
+<<<<<<< HEAD
       window.localStorage.setItem('classroomBackendUrl', BACKEND_URL)
     } catch {
       // Ignore storage failures and rely on the query param fallback.
+=======
+      localStorage.setItem('supernodeUrl', SUPERNODE_URL)
+    } catch {
+      // Ignore storage failures and keep runtime fallback behavior.
+>>>>>>> f729f70c1be5b521f354eb6f8212d8ea26ee3c3d
     }
   }, [])
 
@@ -36,7 +44,14 @@ export default function App() {
     event.preventDefault()
     const trimmedRoom = roomNumber.trim()
     if (!trimmedRoom) return
+<<<<<<< HEAD
     window.location.href = `/classroom.html?name=${encodeURIComponent(trimmedRoom)}&backend=${encodeURIComponent(BACKEND_URL)}`
+=======
+    const classroomUrl = new URL('/classroom.html', window.location.origin)
+    classroomUrl.searchParams.set('name', trimmedRoom)
+    classroomUrl.searchParams.set('backend', SUPERNODE_URL)
+    window.location.href = classroomUrl.toString()
+>>>>>>> f729f70c1be5b521f354eb6f8212d8ea26ee3c3d
   }
 
   // DoubtCanvas is fullscreen - no nav

@@ -446,6 +446,7 @@
   <script>
     // =================== CONFIGURATION ===================
 
+<<<<<<< HEAD
     const DEAD_REMOTE_HOSTS = new Set(['class-ai-backend.onrender.com']);
 
     function normalizeUrl(value) {
@@ -492,14 +493,39 @@
     }
 
     const SUPERNODE_URL = resolveBackendUrl();
+=======
+    // Get classroom name from URL params: ?name=Room101
+    const urlParams = new URLSearchParams(window.location.search);
+
+    function resolveSupernodeUrl() {
+      const explicitUrl = window.SUPERNODE_URL || urlParams.get('backend');
+      if (explicitUrl) return explicitUrl;
+
+      try {
+        const savedUrl = localStorage.getItem('supernodeUrl');
+        if (savedUrl) return savedUrl;
+      } catch {
+        // Ignore storage failures and use hostname fallback.
+      }
+
+      const isLocalHost = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+      return isLocalHost ? 'http://localhost:5000' : 'https://class-ai-backend.onrender.com';
+    }
+
+    const SUPERNODE_URL = resolveSupernodeUrl();
+
+    try {
+      localStorage.setItem('supernodeUrl', SUPERNODE_URL);
+    } catch {
+      // Ignore storage failures and continue with the resolved URL.
+    }
+>>>>>>> f729f70c1be5b521f354eb6f8212d8ea26ee3c3d
 
     // Local Ollama configuration (runs on the classroom device)
     const OLLAMA_URL = window.OLLAMA_URL || 'http://localhost:11434';
     const OLLAMA_MODEL = window.OLLAMA_MODEL || 'phi';
     const OLLAMA_TIMEOUT = 30000; // 30 seconds
 
-    // Get classroom name from URL params: ?name=Room101
-    const urlParams = new URLSearchParams(window.location.search);
     const CLASSROOM_NAME = urlParams.get('name') || 'Classroom ' + Math.floor(Math.random() * 100);
 
     // Stable device ID — persists across doubt-page navigation for same room
@@ -696,25 +722,37 @@
     function handleVideoPlay(data) {
       console.log('[Classroom] Video play command:', data.url);
       const { url, autoPlay = true, volume = 1.0, title, topic } = data;
+      const playableUrl = getPlayableVideoUrl(url);
 
-      currentVideoUrl = url;
+      if (!playableUrl) {
+        console.error('[Classroom] Unsupported video input:', url);
+        currentVideoUrl = null;
+        currentVideoTime = 0;
+        videoContext = {
+          url: null,
+          title: null,
+          topic: null,
+        };
+        showIdleScreen();
+        emitVideoState('error');
+        return;
+      }
+
+      currentVideoUrl = playableUrl;
 
       // Update video context for doubt resolution
       videoContext = {
-        url: url,
+        url: playableUrl,
         title: title || null,
         topic: topic || null,
       };
 
       // Detect if YouTube URL
-      if (isYouTubeUrl(url)) {
-        playYouTube(url, autoPlay);
+      if (isYouTubeUrl(playableUrl)) {
+        playYouTube(playableUrl, autoPlay);
       } else {
-        playHTML5Video(url, autoPlay, volume);
+        playHTML5Video(playableUrl, autoPlay, volume);
       }
-
-      // Acknowledge to server
-      emitVideoState('playing', url);
     }
 
     function handleVideoStop(data) {
@@ -729,6 +767,30 @@
     // Check if URL is YouTube
     function isYouTubeUrl(url) {
       return url.includes('youtube.com') || url.includes('youtu.be');
+    }
+
+    function getPlayableVideoUrl(value) {
+      const trimmed = typeof value === 'string' ? value.trim() : '';
+      if (!trimmed) return null;
+
+      let normalized = trimmed;
+
+      if (!/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(normalized)) {
+        if (normalized.startsWith('//')) {
+          normalized = `https:${normalized}`;
+        } else if (/^(?:www\.|[\w-]+(?:\.[\w-]+)+)/.test(normalized)) {
+          normalized = `https://${normalized}`;
+        } else {
+          return null;
+        }
+      }
+
+      try {
+        const parsed = new URL(normalized);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? normalized : null;
+      } catch {
+        return null;
+      }
     }
 
     // Extract YouTube video ID from various URL formats
@@ -971,11 +1033,10 @@
         if (currentVideoTime > 0) {
           videoPlayer.currentTime = currentVideoTime;
         }
-        videoPlayer.play().catch(() => {});
+        videoPlayer.play().catch(() => emitVideoState('error', url));
       }
 
       announcementOverlay.classList.remove('active');
-      emitVideoState('playing', url);
     }
 
     // UI helpers

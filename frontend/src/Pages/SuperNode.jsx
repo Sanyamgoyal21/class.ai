@@ -4,6 +4,9 @@ import { BACKEND_URL } from '../utils/backendUrl'
 
 const SUPERNODE_URL = BACKEND_URL
 
+const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+.-]*:/
+const BARE_DOMAIN_PATTERN = /^(?:www\.|[\w-]+(?:\.[\w-]+)+)/
+
 // Load saved presets from localStorage
 const loadSavedPresets = () => {
   try {
@@ -14,6 +17,37 @@ const loadSavedPresets = () => {
     ]
   } catch {
     return []
+  }
+}
+
+const normalizeVideoUrl = (value) => {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  if (URL_SCHEME_PATTERN.test(trimmed)) {
+    return trimmed
+  }
+
+  if (trimmed.startsWith('//')) {
+    return `https:${trimmed}`
+  }
+
+  if (BARE_DOMAIN_PATTERN.test(trimmed)) {
+    return `https://${trimmed}`
+  }
+
+  return null
+}
+
+const getPlayableVideoUrl = (value) => {
+  const normalized = normalizeVideoUrl(value)
+  if (!normalized) return null
+
+  try {
+    const parsed = new URL(normalized)
+    return ['http:', 'https:'].includes(parsed.protocol) ? normalized : null
+  } catch {
+    return null
   }
 }
 
@@ -110,6 +144,13 @@ function SuperNode() {
           currentTime: data.currentTime,
         },
       }))
+
+      if (data.state === 'error') {
+        addMessage(
+          `${data.deviceName || data.deviceId} could not play that media. Paste a full YouTube or direct video URL.`,
+          'error'
+        )
+      }
     })
 
     s.on('video:play-sent', (data) => {
@@ -118,6 +159,10 @@ function SuperNode() {
 
     s.on('video:stop-sent', (data) => {
       addMessage(`Video stopped on ${data.targetCount} device(s)`, 'success')
+    })
+
+    s.on('video:error', (data) => {
+      addMessage(data.error || 'Video command failed', 'error')
     })
 
     // Announcement events
@@ -196,10 +241,18 @@ function SuperNode() {
 
   // Play to selected devices (global)
   const playToSelected = () => {
-    if (socket && connected && globalVideoUrl.trim() && selectedDevices.length > 0) {
+    const playableUrl = getPlayableVideoUrl(globalVideoUrl)
+
+    if (!playableUrl) {
+      addMessage('Paste a full YouTube or direct video URL. Search text alone cannot be played.', 'error')
+      return
+    }
+
+    if (socket && connected && selectedDevices.length > 0) {
+      setGlobalVideoUrl(playableUrl)
       socket.emit('video:play', {
         targetDeviceIds: selectedDevices,
-        url: globalVideoUrl.trim(),
+        url: playableUrl,
         autoPlay: true,
         volume: 1.0,
       })
@@ -208,8 +261,18 @@ function SuperNode() {
 
   // Play to single device
   const playToDevice = (deviceId) => {
-    const url = deviceVideoUrls[deviceId]?.trim()
-    if (socket && connected && url) {
+    const url = getPlayableVideoUrl(deviceVideoUrls[deviceId] || '')
+
+    if (!url) {
+      addMessage('Paste a full YouTube or direct video URL. Search text alone cannot be played.', 'error')
+      return
+    }
+
+    if (socket && connected) {
+      setDeviceVideoUrls(prev => ({
+        ...prev,
+        [deviceId]: url,
+      }))
       socket.emit('video:play', {
         targetDeviceIds: [deviceId],
         url: url,
@@ -237,13 +300,21 @@ function SuperNode() {
   // =================== PRESETS ===================
 
   const saveCurrentAsPreset = () => {
-    if (globalVideoUrl.trim() && newPresetName.trim()) {
+    const playableUrl = getPlayableVideoUrl(globalVideoUrl)
+
+    if (!playableUrl && globalVideoUrl.trim()) {
+      addMessage('Only full YouTube or direct video URLs can be saved as presets.', 'error')
+      return
+    }
+
+    if (playableUrl && newPresetName.trim()) {
       const newPreset = {
         id: Date.now(),
         name: newPresetName.trim(),
-        url: globalVideoUrl.trim(),
+        url: playableUrl,
       }
       setSavedPresets(prev => [...prev, newPreset])
+      setGlobalVideoUrl(playableUrl)
       setNewPresetName('')
       setShowPresetModal(false)
       addMessage(`Preset "${newPreset.name}" saved`, 'success')
@@ -407,7 +478,7 @@ function SuperNode() {
           </select>
           <input
             type="text"
-            placeholder="YouTube or video URL..."
+            placeholder="Paste full YouTube or video URL..."
             value={globalVideoUrl}
             onChange={(e) => setGlobalVideoUrl(e.target.value)}
             style={styles.urlInput}
@@ -502,7 +573,7 @@ function SuperNode() {
                     <div style={styles.deviceVideoControl}>
                       <input
                         type="text"
-                        placeholder="Video URL for this classroom..."
+                        placeholder="Paste full video URL for this classroom..."
                         value={deviceVideoUrls[device.deviceId] || ''}
                         onChange={(e) => setDeviceVideoUrls(prev => ({
                           ...prev,
