@@ -16,6 +16,12 @@ try:
 except Exception:
     USE_FACE_RECOGNITION = False
 
+try:
+    import mediapipe as mp
+    HAS_MEDIAPIPE = True
+except Exception:
+    HAS_MEDIAPIPE = False
+
 class FaceRecognizer(threading.Thread):
     """Runs face recognition (dlib) or OpenCV LBPH fallback in a background thread.
 
@@ -37,11 +43,17 @@ class FaceRecognizer(threading.Thread):
         display=True,
         lbph_confidence_thresh=70,
         detection_model='hog',  # Changed from 'cnn' to 'hog' for much faster detection
+        detection_upsample=1,
         tolerance=0.6,
         min_face_area=2000,
         confirm_frames=3,
         process_every_n_frames=2,  # Process every Nth frame to reduce lag
-        resize_scale=0.5,  # Resize frame for faster processing
+        resize_scale=0.75,  # Resize frame for faster processing
+        use_mediapipe=True,
+        use_profile_cascade=True,
+        face_encoding_jitters=1,
+        identity_timeout=8.0,
+        enable_tracking=True,
     ):
         super().__init__(daemon=True)
         self.known_dir = known_dir
@@ -61,9 +73,11 @@ class FaceRecognizer(threading.Thread):
 
         # New parameters for improved matching
         self.detection_model = detection_model  # 'hog' or 'cnn'
+        self.detection_upsample = detection_upsample
         self.tolerance = tolerance  # max distance for a positive match (lower = stricter)
         self.min_face_area = min_face_area  # ignore tiny faces
         self.confirm_frames = confirm_frames  # consecutive frames required to confirm attendance
+        self.face_encoding_jitters = face_encoding_jitters
         from collections import defaultdict
         self._confirm_counts = defaultdict(int)
 
@@ -75,7 +89,31 @@ class FaceRecognizer(threading.Thread):
         # Identity persistence - remember last known identity for temporary occlusions
         self._last_known_name = "Unknown"
         self._last_detection_time = 0
-        self._identity_timeout = 3.0  # seconds to keep identity when face not detected
+        self._identity_timeout = identity_timeout  # seconds to keep identity when face not detected
+        self.enable_tracking = enable_tracking
+        self._tracker = None
+        self._tracker_name = "Unknown"
+        self._tracker_bbox = None  # OpenCV format: x, y, w, h
+        self._tracker_last_update = 0
+        self._mp_face_detection = None
+        self._profile_detector = None
+
+        if self.use_fr and use_mediapipe and HAS_MEDIAPIPE:
+            try:
+                self._mp_face_detection = mp.solutions.face_detection.FaceDetection(
+                    model_selection=1,
+                    min_detection_confidence=0.45,
+                )
+                print("MediaPipe face detector enabled for angled/partial faces.")
+            except Exception as e:
+                print("MediaPipe face detector unavailable:", e)
+                self._mp_face_detection = None
+
+        if self.use_fr and use_profile_cascade:
+            profile_path = cv2.data.haarcascades + "haarcascade_profileface.xml"
+            self._profile_detector = cv2.CascadeClassifier(profile_path)
+            if self._profile_detector.empty():
+                self._profile_detector = None
 
         if self.use_fr:
             # load known faces with face_recognition (either from filesystem or MongoDB)
@@ -119,7 +157,11 @@ class FaceRecognizer(threading.Thread):
                                 # full image as the face location to skip re-detection
                                 h, w = image.shape[:2]
                                 known_locations = [(0, w, h, 0)]  # top, right, bottom, left
-                                encoding = face_recognition.face_encodings(image, known_face_locations=known_locations)
+                                encoding = face_recognition.face_encodings(
+                                    image,
+                                    known_face_locations=known_locations,
+                                    num_jitters=max(1, self.face_encoding_jitters),
+                                )
                                 if encoding:
                                     self.known_encodings.append(encoding[0])
                                     self.known_names.append(student)
@@ -220,6 +262,207 @@ class FaceRecognizer(threading.Thread):
         self.recognizer.train(images, np.array(labels))
         print(f"Trained LBPH recognizer on {len(images)} face samples.")
 
+    def _clip_location(self, loc, frame_shape):
+        top, right, bottom, left = loc
+        h, w = frame_shape[:2]
+        top = max(0, min(h - 1, int(top)))
+        bottom = max(0, min(h, int(bottom)))
+        left = max(0, min(w - 1, int(left)))
+        right = max(0, min(w, int(right)))
+        if bottom <= top or right <= left:
+            return None
+        return (top, right, bottom, left)
+
+    def _expand_location(self, loc, frame_shape, amount=0.18):
+        top, right, bottom, left = loc
+        width = right - left
+        height = bottom - top
+        pad_x = int(width * amount)
+        pad_y = int(height * amount)
+        return self._clip_location((top - pad_y, right + pad_x, bottom + pad_y, left - pad_x), frame_shape)
+
+    def _location_area(self, loc):
+        top, right, bottom, left = loc
+        return max(0, right - left) * max(0, bottom - top)
+
+    def _location_iou(self, a, b):
+        at, ar, ab, al = a
+        bt, br, bb, bl = b
+        inter_left = max(al, bl)
+        inter_top = max(at, bt)
+        inter_right = min(ar, br)
+        inter_bottom = min(ab, bb)
+        inter_area = max(0, inter_right - inter_left) * max(0, inter_bottom - inter_top)
+        if inter_area == 0:
+            return 0.0
+        union = self._location_area(a) + self._location_area(b) - inter_area
+        return inter_area / union if union else 0.0
+
+    def _loc_to_tracker_bbox(self, loc):
+        top, right, bottom, left = loc
+        return (int(left), int(top), int(right - left), int(bottom - top))
+
+    def _tracker_bbox_to_loc(self, bbox, frame_shape):
+        x, y, w, h = bbox
+        return self._clip_location((y, x + w, y + h, x), frame_shape)
+
+    def _create_tracker(self):
+        tracker_names = ("TrackerCSRT_create", "TrackerKCF_create", "TrackerMIL_create")
+        for name in tracker_names:
+            creator = getattr(cv2, name, None)
+            if creator:
+                try:
+                    return creator()
+                except Exception:
+                    pass
+        legacy = getattr(cv2, "legacy", None)
+        if legacy:
+            for name in tracker_names:
+                creator = getattr(legacy, name, None)
+                if creator:
+                    try:
+                        return creator()
+                    except Exception:
+                        pass
+        return None
+
+    def _start_identity_tracker(self, frame, name, loc):
+        if not self.enable_tracking or name == "Unknown":
+            return
+        tracker = self._create_tracker()
+        if tracker is None:
+            return
+        bbox = self._loc_to_tracker_bbox(loc)
+        try:
+            ok = tracker.init(frame, bbox)
+        except Exception:
+            ok = False
+        if ok is None or ok:
+            self._tracker = tracker
+            self._tracker_name = name
+            self._tracker_bbox = bbox
+            self._tracker_last_update = time.time()
+
+    def _tracked_face_info(self, frame):
+        if not self.enable_tracking or self._tracker is None or self._tracker_name == "Unknown":
+            return None
+        if time.time() - self._last_detection_time > self._identity_timeout:
+            self._tracker = None
+            return None
+        try:
+            ok, bbox = self._tracker.update(frame)
+        except Exception:
+            self._tracker = None
+            return None
+        if not ok:
+            self._tracker = None
+            return None
+
+        loc = self._tracker_bbox_to_loc(tuple(int(v) for v in bbox), frame.shape)
+        if not loc:
+            self._tracker = None
+            return None
+        top, right, bottom, left = loc
+        area = (right - left) * (bottom - top)
+        if area < self.min_face_area:
+            return None
+        self._tracker_bbox = self._loc_to_tracker_bbox(loc)
+        self._tracker_last_update = time.time()
+        return {
+            "name": self._tracker_name,
+            "bbox": loc,
+            "area": area,
+            "center": ((left + right) // 2, (top + bottom) // 2),
+            "tracked": True,
+        }
+
+    def _dedupe_locations(self, locations):
+        unique = []
+        for loc in sorted(locations, key=self._location_area, reverse=True):
+            if all(self._location_iou(loc, existing) < 0.35 for existing in unique):
+                unique.append(loc)
+        return unique
+
+    def _mediapipe_locations(self, frame):
+        if self._mp_face_detection is None:
+            return []
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        result = self._mp_face_detection.process(rgb)
+        if not result.detections:
+            return []
+
+        h, w = frame.shape[:2]
+        locations = []
+        for detection in result.detections:
+            bbox = detection.location_data.relative_bounding_box
+            left = int(bbox.xmin * w)
+            top = int(bbox.ymin * h)
+            right = int((bbox.xmin + bbox.width) * w)
+            bottom = int((bbox.ymin + bbox.height) * h)
+            loc = self._expand_location((top, right, bottom, left), frame.shape)
+            if loc:
+                locations.append(loc)
+        return locations
+
+    def _profile_locations(self, frame):
+        if self._profile_detector is None:
+            return []
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        min_side = max(45, min(frame.shape[:2]) // 10)
+        locations = []
+
+        faces = self._profile_detector.detectMultiScale(
+            gray, scaleFactor=1.08, minNeighbors=3, minSize=(min_side, min_side)
+        )
+        for (x, y, w, h) in faces:
+            loc = self._expand_location((y, x + w, y + h, x), frame.shape, amount=0.22)
+            if loc:
+                locations.append(loc)
+
+        flipped = cv2.flip(gray, 1)
+        flipped_faces = self._profile_detector.detectMultiScale(
+            flipped, scaleFactor=1.08, minNeighbors=3, minSize=(min_side, min_side)
+        )
+        frame_w = frame.shape[1]
+        for (x, y, w, h) in flipped_faces:
+            left = frame_w - x - w
+            loc = self._expand_location((y, left + w, y + h, left), frame.shape, amount=0.22)
+            if loc:
+                locations.append(loc)
+
+        return locations
+
+    def _detect_face_locations(self, frame):
+        locations = []
+
+        if self.resize_scale and self.resize_scale != 1.0:
+            small_frame = cv2.resize(frame, (0, 0), fx=self.resize_scale, fy=self.resize_scale)
+            rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+            small_locations = face_recognition.face_locations(
+                rgb_small,
+                number_of_times_to_upsample=self.detection_upsample,
+                model=self.detection_model,
+            )
+            scale = 1.0 / self.resize_scale
+            locations.extend(
+                self._clip_location((t * scale, r * scale, b * scale, l * scale), frame.shape)
+                for (t, r, b, l) in small_locations
+            )
+        else:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            locations.extend(face_recognition.face_locations(
+                rgb,
+                number_of_times_to_upsample=self.detection_upsample,
+                model=self.detection_model,
+            ))
+
+        locations.extend(self._mediapipe_locations(frame))
+        locations.extend(self._profile_locations(frame))
+        locations = [loc for loc in locations if loc is not None]
+        return self._dedupe_locations(locations)
+
     def run(self):
         cap = cv2.VideoCapture(self.camera_index)
         self.running = True
@@ -241,18 +484,15 @@ class FaceRecognizer(threading.Thread):
 
             if self.use_fr:
                 if should_process:
-                    # Resize frame for faster processing
-                    small_frame = cv2.resize(frame, (0, 0), fx=self.resize_scale, fy=self.resize_scale)
-                    rgb = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-
-                    # Use configured detector model
-                    locations = face_recognition.face_locations(rgb, model=self.detection_model)
-                    encodings = face_recognition.face_encodings(rgb, locations)
-
-                    # Scale locations back to original frame size
-                    scale = 1.0 / self.resize_scale
-                    locations = [(int(t*scale), int(r*scale), int(b*scale), int(l*scale))
-                                 for (t, r, b, l) in locations]
+                    # Detect on resized/auxiliary detectors, then encode from
+                    # the original frame so angled faces keep more landmark detail.
+                    locations = self._detect_face_locations(frame)
+                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    encodings = face_recognition.face_encodings(
+                        rgb,
+                        locations,
+                        num_jitters=max(1, self.face_encoding_jitters),
+                    )
                     cached_locations = list(zip(encodings, locations))
                 else:
                     # Use cached results but still draw on current frame
@@ -288,6 +528,7 @@ class FaceRecognizer(threading.Thread):
                         # Update last known identity cache
                         self._last_known_name = name
                         self._last_detection_time = time.time()
+                        self._start_identity_tracker(frame, name, loc)
 
                     if self.display:
                         label = name
@@ -296,7 +537,27 @@ class FaceRecognizer(threading.Thread):
                         cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
                         cv2.putText(frame, label, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
 
-                # If no faces detected, use cached identity within timeout period
+                # If the detector loses an angled/covered face, keep following the
+                # last confirmed face with an OpenCV tracker for a short window.
+                if not faces_info and self._last_known_name != "Unknown":
+                    tracked_face = self._tracked_face_info(frame)
+                    if tracked_face:
+                        faces_info.append(tracked_face)
+                        seen_names_this_frame.add(tracked_face["name"])
+                        if self.display:
+                            top, right, bottom, left = tracked_face["bbox"]
+                            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 255), 2)
+                            cv2.putText(
+                                frame,
+                                f"{tracked_face['name']} (tracked)",
+                                (left, top - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.8,
+                                (0, 255, 255),
+                                2,
+                            )
+
+                # If tracking is unavailable, use cached identity within timeout period.
                 if not faces_info and self._last_known_name != "Unknown":
                     elapsed = time.time() - self._last_detection_time
                     if elapsed < self._identity_timeout:
@@ -379,6 +640,11 @@ class FaceRecognizer(threading.Thread):
                     print("Retraining complete.")
 
         cap.release()
+        if self._mp_face_detection is not None:
+            try:
+                self._mp_face_detection.close()
+            except Exception:
+                pass
         if self.display:
             cv2.destroyAllWindows()
 

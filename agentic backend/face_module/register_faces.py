@@ -107,8 +107,7 @@ while True:
     # Save detected face
     if key == ord('s') and face_detected and face_region is not None:
         x, y, w, h = face_region
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        roi = gray[y:y+h, x:x+w]
+        roi = frame[y:y+h, x:x+w]
         try:
             face_img = cv2.resize(roi, (200, 200))
         except Exception:
@@ -139,8 +138,7 @@ while True:
         x1, y1 = max(0, cx - size), max(0, cy - size)
         x2, y2 = min(w, cx + size), min(h, cy + size)
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        roi = gray[y1:y2, x1:x2]
+        roi = frame[y1:y2, x1:x2]
         try:
             face_img = cv2.resize(roi, (200, 200))
         except Exception:
