@@ -1,52 +1,47 @@
 import { useEffect, useRef, useState } from 'react'
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
-import { animateDiagram, applyViewportToDiagram } from '../utils/DiagramEngine.ts'
-import { animateAlgorithm, applyAlgorithmStep, normalizeInstruction } from '../utils/AlgorithmVisualizer.ts'
-import { renderVisualsChunk } from '../utils/VisualInstructionEngine.ts'
+import { BACKEND_URL } from '../utils/backendUrl'
+import { createLessonScheduler } from '../utils/LessonScheduler.ts'
+import { validateLessonPlan } from '../utils/teachingTemplates.ts'
 
 function DoubtCanvas() {
   const [, setChatMessages] = useState([])
   const [, setLoading] = useState(false)
-  const [phase, setPhase] = useState('thinking')
-  const [, setCurrentSpeech] = useState('')
+  const [phase, setPhase] = useState('listening')
+  const [currentSpeech, setCurrentSpeech] = useState('')
   const [micDenied, setMicDenied] = useState(false)
   const [liveTranscript, setLiveTranscript] = useState('')
   const [needsTap, setNeedsTap] = useState(false)
   const [speechLog, setSpeechLog] = useState([])
   const [logCollapsed, setLogCollapsed] = useState(false)
+  const [speechSupported, setSpeechSupported] = useState(true)
+  const [manualQuestion, setManualQuestion] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
 
   const logEndRef = useRef(null)
   const mountedRef = useRef(false)
   const excalidrawAPIRef = useRef(null)
-  const speechBufferRef = useRef('')
+  const schedulerRef = useRef(null)
   const esRef = useRef(null)
-  const queuedDiagramRef = useRef(null)
-  const queuedAlgorithmRef = useRef(null)
-  const queuedVisualsRef = useRef([])
-  const activeSpeechRef = useRef(0)
-  const algoNormalizedRef = useRef(null)
-  const algoBoardStateRef = useRef(null)
-  const algoStepIndexRef = useRef(0)
-  const pendingFractionRef = useRef(null)
-  const phaseRef = useRef('thinking')
   const recognitionRef = useRef(null)
   const recognitionRunningRef = useRef(false)
   const shouldListenRef = useRef(false)
   const activeRequestIdRef = useRef(0)
-  const pendingUtterancesRef = useRef(0)
-  const streamCompleteRef = useRef(false)
-  const finalizingResponseRef = useRef(false)
+  const phaseRef = useRef('listening')
   const safetyTimerRef = useRef(null)
+  const recognitionBuiltRef = useRef(false)
 
   const roomName = new URLSearchParams(window.location.search).get('room') || 'Room102'
 
   const setAssistantPhase = (nextPhase) => {
     phaseRef.current = nextPhase
     if (mountedRef.current) setPhase(nextPhase)
-    if (nextPhase === 'listening') console.log('[DC] listening started')
-    if (nextPhase === 'thinking') console.log('[DC] question sent to backend')
-    if (nextPhase === 'speaking') console.log('[DC] speaking started')
+  }
+
+  const appendLogEntry = (entry) => {
+    if (!mountedRef.current) return
+    setSpeechLog((prev) => [...prev, entry])
   }
 
   const clearSafetyTimer = () => {
@@ -56,35 +51,50 @@ function DoubtCanvas() {
     }
   }
 
-  const resetCanvas = () => {
-    excalidrawAPIRef.current?.updateScene({
-      elements: [],
-      appState: { viewBackgroundColor: '#ffffff' },
+  const waitForScheduler = async (timeoutMs = 5000) => {
+    const started = Date.now()
+    while (Date.now() - started < timeoutMs) {
+      const scheduler = ensureScheduler()
+      if (scheduler) return scheduler
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    return null
+  }
+
+  const ensureScheduler = () => {
+    if (schedulerRef.current || !excalidrawAPIRef.current) return schedulerRef.current
+
+    schedulerRef.current = createLessonScheduler(excalidrawAPIRef.current, {
+      onPhaseChange: (nextPhase) => setAssistantPhase(nextPhase),
+      onSpeechStart: (text) => {
+        if (!mountedRef.current) return
+        setCurrentSpeech(text)
+      },
+      onSpeechEnd: () => {
+        if (!mountedRef.current) return
+        setCurrentSpeech('')
+      },
+      onStepStart: (step) => {
+        appendLogEntry({ id: `${Date.now()}-${step.step_number}`, role: 'ai', text: step.speech_text })
+      },
     })
-    speechBufferRef.current = ''
-    queuedDiagramRef.current = null
-    queuedAlgorithmRef.current = null
-    queuedVisualsRef.current = []
-    activeSpeechRef.current = 0
-    algoNormalizedRef.current = null
-    algoBoardStateRef.current = null
-    algoStepIndexRef.current = 0
-    pendingFractionRef.current = null
-    if (mountedRef.current) {
-      setCurrentSpeech('')
+
+    return schedulerRef.current
+  }
+
+  const resetBoard = ({ clearLog = false } = {}) => {
+    schedulerRef.current?.cancel({ resetBoard: true })
+    esRef.current?.close()
+    esRef.current = null
+    setCurrentSpeech('')
+    if (clearLog && mountedRef.current) {
       setSpeechLog([])
     }
   }
 
   const invalidateActiveRequest = () => {
     activeRequestIdRef.current += 1
-    pendingUtterancesRef.current = 0
-    streamCompleteRef.current = false
-    finalizingResponseRef.current = false
-    activeSpeechRef.current = 0
-    speechBufferRef.current = ''
-    pendingFractionRef.current = null
-    queuedVisualsRef.current = []
+    resetBoard()
   }
 
   const stopRecognition = () => {
@@ -109,54 +119,8 @@ function DoubtCanvas() {
     }
   }
 
-  const renderDiagramPayload = async (diagram) => {
-    if (!diagram || !excalidrawAPIRef.current) return
-    try {
-      await animateDiagram(diagram, excalidrawAPIRef.current, { reset: true, duration: 460 })
-      applyViewportToDiagram(excalidrawAPIRef.current)
-    } catch (error) {
-      console.warn('[DC] Diagram render error:', error)
-    }
-  }
-
-  const renderAlgorithmPayload = async (algorithm) => {
-    if (!algorithm || !excalidrawAPIRef.current) return
-    try {
-      await animateAlgorithm(algorithm, excalidrawAPIRef.current, { reset: true })
-      applyViewportToDiagram(excalidrawAPIRef.current)
-    } catch (error) {
-      console.warn('[DC] Algorithm render error:', error)
-    }
-  }
-
-  const flushQueuedVisual = () => {
-    if (queuedVisualsRef.current.length) {
-      const visuals = queuedVisualsRef.current.shift()
-      renderVisualsChunk(visuals, excalidrawAPIRef.current, { reset: false })
-      applyViewportToDiagram(excalidrawAPIRef.current)
-      return
-    }
-
-    if (queuedAlgorithmRef.current) {
-      const algorithm = queuedAlgorithmRef.current
-      queuedAlgorithmRef.current = null
-      void renderAlgorithmPayload(algorithm)
-      return
-    }
-
-    if (queuedDiagramRef.current) {
-      const diagram = queuedDiagramRef.current
-      queuedDiagramRef.current = null
-      void renderDiagramPayload(diagram)
-    }
-  }
-
   const maybeResumeListening = (requestId) => {
     if (requestId !== activeRequestIdRef.current) return
-    if (!streamCompleteRef.current) return
-    if (pendingUtterancesRef.current > 0) return
-    if (finalizingResponseRef.current) return
-
     clearSafetyTimer()
     shouldListenRef.current = true
     if (mountedRef.current) {
@@ -164,49 +128,34 @@ function DoubtCanvas() {
       setLiveTranscript('')
     }
     setAssistantPhase('listening')
-    console.log('[DC] recognition restarted')
     startRecognition()
   }
 
   const exitToClassroom = () => {
-    console.log('[DC] "Clear" command detected')
     shouldListenRef.current = false
     clearSafetyTimer()
     stopRecognition()
-    esRef.current?.close()
-    esRef.current = null
     invalidateActiveRequest()
-    window.speechSynthesis.cancel()
-    resetCanvas()
+    window.speechSynthesis?.cancel()
     if (mountedRef.current) {
       setLiveTranscript('')
       setCurrentSpeech('')
     }
-    window.location.href = `/classroom.html?name=${encodeURIComponent(roomName)}`
+    window.location.href = `/classroom.html?name=${encodeURIComponent(roomName)}&backend=${encodeURIComponent(BACKEND_URL)}`
   }
 
   useEffect(() => {
     mountedRef.current = true
-
-    const handleResize = () => {
-      if (excalidrawAPIRef.current?.getSceneElements()?.length) {
-        applyViewportToDiagram(excalidrawAPIRef.current)
-      }
-    }
-
-    window.addEventListener('resize', handleResize)
-    buildRecognition()
+    ensureScheduler()
 
     return () => {
       mountedRef.current = false
-      window.removeEventListener('resize', handleResize)
       clearSafetyTimer()
       shouldListenRef.current = false
       esRef.current?.close()
-      esRef.current = null
       stopRecognition()
-      window.speechSynthesis.cancel()
-      activeSpeechRef.current = 0
+      schedulerRef.current?.cancel({ resetBoard: false })
+      window.speechSynthesis?.cancel()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -216,15 +165,21 @@ function DoubtCanvas() {
   }, [speechLog, logCollapsed])
 
   function buildRecognition() {
+    if (recognitionBuiltRef.current) return
+    recognitionBuiltRef.current = true
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SpeechRecognition) {
       console.warn('[DC] SpeechRecognition not supported')
+      if (mountedRef.current) setSpeechSupported(false)
+      shouldListenRef.current = false
+      setAssistantPhase('listening')
       return
     }
 
     const recognition = new SpeechRecognition()
     recognition.continuous = true
-    recognition.interimResults = false
+    recognition.interimResults = true
     recognition.lang = 'en-US'
 
     recognition.onstart = () => {
@@ -234,16 +189,19 @@ function DoubtCanvas() {
 
     recognition.onresult = (event) => {
       if (phaseRef.current !== 'listening') return
+      let interimText = ''
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const result = event.results[i]
-        if (!result.isFinal) continue
-
         const text = result[0].transcript.trim()
+
+        if (!result.isFinal) {
+          interimText += `${text} `
+          continue
+        }
+
         if (mountedRef.current) setLiveTranscript('')
         if (!text || text.length <= 2) continue
-
-        console.log('[DC] speech detected:', text)
 
         if (/^\s*clear\s*$/i.test(text)) {
           exitToClassroom()
@@ -253,9 +211,15 @@ function DoubtCanvas() {
         handleQuestion(text)
         return
       }
+
+      if (mountedRef.current) {
+        setLiveTranscript(interimText.trim())
+      }
     }
 
     recognition.onerror = (event) => {
+      if (event.error === 'aborted') return
+
       console.warn('[DC] Recognition error:', event.error)
       recognitionRunningRef.current = false
 
@@ -265,6 +229,12 @@ function DoubtCanvas() {
 
       if (event.error === 'not-allowed') {
         if (mountedRef.current) setNeedsTap(true)
+      } else if (shouldListenRef.current && phaseRef.current === 'listening') {
+        setTimeout(() => {
+          if (mountedRef.current && shouldListenRef.current && phaseRef.current === 'listening') {
+            startRecognition()
+          }
+        }, 700)
       }
     }
 
@@ -286,79 +256,23 @@ function DoubtCanvas() {
     startRecognition()
   }
 
-  const speakSentence = (text, requestId, onEnd) => {
-    if (requestId !== activeRequestIdRef.current) {
-      onEnd?.()
-      return
-    }
-
-    if (!window.speechSynthesis) {
-      onEnd?.()
-      maybeResumeListening(requestId)
-      return
-    }
-
-    activeSpeechRef.current += 1
-    pendingUtterancesRef.current += 1
-
-    if (mountedRef.current) {
-      setCurrentSpeech(text)
-      setAssistantPhase('speaking')
-      setSpeechLog((prev) => [...prev, { id: Date.now() + Math.random(), role: 'ai', text }])
-    }
-
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 0.95
-    utterance.pitch = 1.05
-
-    const done = () => {
-      if (requestId !== activeRequestIdRef.current) {
-        onEnd?.()
-        return
-      }
-
-      activeSpeechRef.current = Math.max(0, activeSpeechRef.current - 1)
-      pendingUtterancesRef.current = Math.max(0, pendingUtterancesRef.current - 1)
-
-      if (activeSpeechRef.current === 0) {
-        if (mountedRef.current) setCurrentSpeech('')
-        if (pendingFractionRef.current !== null && algoNormalizedRef.current && excalidrawAPIRef.current) {
-          const normalized = algoNormalizedRef.current
-          const total = normalized.steps.length
-          const target = Math.round(pendingFractionRef.current * total)
-          pendingFractionRef.current = null
-          for (let i = algoStepIndexRef.current; i < target && i < total; i++) {
-            algoBoardStateRef.current = applyAlgorithmStep(
-              normalized,
-              normalized.steps[i],
-              algoBoardStateRef.current,
-              excalidrawAPIRef.current,
-            )
-            algoStepIndexRef.current = i + 1
-          }
-        } else {
-          flushQueuedVisual()
-        }
-      }
-
-      onEnd?.()
-      maybeResumeListening(requestId)
-    }
-
-    utterance.onend = done
-    utterance.onerror = done
-    window.speechSynthesis.speak(utterance)
-  }
-
   const connectSSE = (question, requestId) =>
     new Promise((resolve, reject) => {
-      const url = `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/doubt/stream?q=${encodeURIComponent(question)}&feynman=1`
+      const url = `${BACKEND_URL}/api/doubt/stream?q=${encodeURIComponent(question)}&feynman=1`
       const eventSource = new EventSource(url)
       esRef.current = eventSource
-      const msgId = Date.now()
-      setChatMessages((prev) => [...prev, { id: msgId, role: 'assistant', content: '' }])
+      let resolved = false
+      const seenTypes = new Set()
 
-      eventSource.onmessage = (event) => {
+      const tryResolvePlan = (payload) => {
+        const plan = validateLessonPlan(payload)
+        if (!plan) return false
+        resolved = true
+        resolve(plan)
+        return true
+      }
+
+      const handleSseEvent = (event) => {
         if (requestId !== activeRequestIdRef.current) {
           eventSource.close()
           return
@@ -371,101 +285,54 @@ function DoubtCanvas() {
           return
         }
 
-        if (msg.type === 'algorithm_init') {
-          algoNormalizedRef.current = normalizeInstruction(msg.payload)
-          algoBoardStateRef.current = null
-          algoStepIndexRef.current = 0
-          excalidrawAPIRef.current?.updateScene({
-            elements: [],
-            appState: { viewBackgroundColor: '#ffffff' },
-          })
+        if (!msg || typeof msg !== 'object') return
+
+        if (!msg.type && event.type && event.type !== 'message') {
+          msg.type = event.type
         }
 
-        if (msg.type === 'chat_chunk') {
-          const chunk = msg.payload
-          setChatMessages((prev) =>
-            prev.map((entry) => (entry.id === msgId ? { ...entry, content: entry.content + chunk + ' ' } : entry)),
-          )
-          speechBufferRef.current += chunk + ' '
-          if (/[.!?]\s*$/.test(speechBufferRef.current.trim())) {
-            const sentence = speechBufferRef.current.trim()
-            speechBufferRef.current = ''
-            speakSentence(sentence, requestId)
-          }
+        if (msg?.type) {
+          seenTypes.add(msg.type)
         }
 
-        if (msg.type === 'algorithm_advance') {
-          const fraction = msg.payload.fraction
-          const normalized = algoNormalizedRef.current
-          if (!normalized || !excalidrawAPIRef.current) return
-          const total = normalized.steps.length
-          const target = Math.round(fraction * total)
-          if (activeSpeechRef.current > 0) {
-            pendingFractionRef.current = fraction
-          } else {
-            for (let i = algoStepIndexRef.current; i < target && i < total; i++) {
-              algoBoardStateRef.current = applyAlgorithmStep(
-                normalized,
-                normalized.steps[i],
-                algoBoardStateRef.current,
-                excalidrawAPIRef.current,
-              )
-              algoStepIndexRef.current = i + 1
-            }
-          }
-        }
-
-        if (msg.type === 'visual_chunk') {
-          const visuals = Array.isArray(msg.payload?.visuals) ? msg.payload.visuals : []
-          if (!visuals.length) return
-          if (activeSpeechRef.current > 0) {
-            queuedVisualsRef.current.push(visuals)
-          } else {
-            renderVisualsChunk(visuals, excalidrawAPIRef.current, { reset: false })
-            applyViewportToDiagram(excalidrawAPIRef.current)
-          }
-        }
-
-        if (msg.type === 'diagram') {
-          if (activeSpeechRef.current > 0) queuedDiagramRef.current = msg.payload
-          else void renderDiagramPayload(msg.payload)
-        }
-
-        if (msg.type === 'algorithm') {
-          if (activeSpeechRef.current > 0) queuedAlgorithmRef.current = msg.payload
-          else void renderAlgorithmPayload(msg.payload)
-        }
-
-        if (msg.type === 'complete') {
-          console.log('[DC] SSE complete event received')
-          streamCompleteRef.current = true
-          finalizingResponseRef.current = Boolean(speechBufferRef.current.trim())
-
-          if (speechBufferRef.current.trim()) {
-            const remaining = speechBufferRef.current.trim()
-            speechBufferRef.current = ''
-            speakSentence(remaining, requestId, () => {
-              flushQueuedVisual()
-              finalizingResponseRef.current = false
-              maybeResumeListening(requestId)
-            })
-          } else {
-            flushQueuedVisual()
-            finalizingResponseRef.current = false
-            maybeResumeListening(requestId)
-          }
-
+        const payloadCandidate = msg.payload || msg.data || msg
+        if (tryResolvePlan(payloadCandidate)) {
           eventSource.close()
           esRef.current = null
-          resolve()
+          return
         }
 
         if (msg.type === 'error') {
           eventSource.close()
           esRef.current = null
           reject(new Error(msg.error || 'SSE stream error'))
+          return
+        }
+
+        if (msg.type === 'complete') {
+          eventSource.close()
+          esRef.current = null
+          if (!resolved) {
+            const typeSummary = Array.from(seenTypes).join(', ') || 'none'
+            reject(new Error(`SSE completed without lesson plan (events: ${typeSummary})`))
+          }
         }
       }
+
+      eventSource.onmessage = handleSseEvent
+      ;[
+        'lesson_start',
+        'lesson_plan',
+        'legacy_lesson',
+        'visual_chunk',
+        'chat_chunk',
+        'algorithm_init',
+        'algorithm_advance',
+        'complete',
+        'error',
+      ].forEach((eventName) => {
+        eventSource.addEventListener(eventName, handleSseEvent)
+      })
 
       eventSource.onerror = () => {
         eventSource.close()
@@ -474,15 +341,34 @@ function DoubtCanvas() {
       }
     })
 
-  const handleQuestion = async (question) => {
-    if (phaseRef.current !== 'listening') return
+  const fetchLessonPlan = async (question, requestId) => {
+    try {
+      const plan = await connectSSE(question, requestId)
+      if (requestId !== activeRequestIdRef.current) return null
+      return plan
+    } catch (sseError) {
+      console.warn('[DC] SSE failed, falling back to POST:', sseError.message)
+    }
 
+    const response = await fetch(`${BACKEND_URL}/api/doubt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    })
+    const data = await response.json()
+    if (!data.success) throw new Error(data.error || 'Doubt API error')
+    const plan = validateLessonPlan(data.data)
+    if (!plan) throw new Error('Backend returned an invalid lesson plan')
+    return plan
+  }
+
+  const handleQuestion = async (question) => {
     const normalizedQuestion = question.trim()
     if (!normalizedQuestion || normalizedQuestion.length <= 2) return
 
     shouldListenRef.current = false
     stopRecognition()
-    window.speechSynthesis.cancel()
+    window.speechSynthesis?.cancel()
     clearSafetyTimer()
     invalidateActiveRequest()
     const requestId = activeRequestIdRef.current
@@ -490,85 +376,45 @@ function DoubtCanvas() {
     setChatMessages((prev) => [...prev, { role: 'user', content: normalizedQuestion }])
     setLoading(true)
     setAssistantPhase('thinking')
-    resetCanvas()
-    setSpeechLog([{ id: Date.now(), role: 'user', text: normalizedQuestion }])
+    resetBoard({ clearLog: true })
+    setSpeechLog([{ id: `${Date.now()}-user`, role: 'user', text: normalizedQuestion }])
     setLiveTranscript('')
+    setManualQuestion('')
+    setErrorMessage('')
 
     safetyTimerRef.current = setTimeout(() => {
       if (requestId === activeRequestIdRef.current && mountedRef.current) {
         console.warn('[DC] Safety timeout - force-resuming listening')
-        window.speechSynthesis.cancel()
-        pendingUtterancesRef.current = 0
-        streamCompleteRef.current = true
-        finalizingResponseRef.current = false
-        activeSpeechRef.current = 0
+        schedulerRef.current?.cancel({ resetBoard: false })
+        setErrorMessage('The explanation took too long, so listening resumed.')
+        appendLogEntry({ id: `${Date.now()}-timeout`, role: 'system', text: 'The explanation timed out before playback started.' })
         maybeResumeListening(requestId)
       }
-    }, 60000)
+    }, 90000)
 
-    let sseSucceeded = false
     try {
-      await connectSSE(normalizedQuestion, requestId)
-      sseSucceeded = true
-    } catch (sseError) {
-      console.warn('[DC] SSE failed, falling back to POST:', sseError.message)
-    }
+      const plan = await fetchLessonPlan(normalizedQuestion, requestId)
+      if (requestId !== activeRequestIdRef.current) return
+      if (!plan) throw new Error('Lesson plan unavailable')
 
-    if (!sseSucceeded) {
-      try {
-        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/doubt`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: normalizedQuestion }),
-        })
-        const data = await response.json()
-        if (requestId !== activeRequestIdRef.current) return
+      const scheduler = await waitForScheduler()
+      if (!scheduler) throw new Error('Canvas scheduler unavailable')
 
-        streamCompleteRef.current = true
+      scheduler.loadPlan(plan)
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: plan.timeline.map((step) => step.speech_text).join(' ') }])
+      await scheduler.start()
 
-        if (data.success) {
-          setChatMessages((prev) => [...prev, { role: 'assistant', content: data.data.chat }])
-          if (Array.isArray(data.data.visuals) && data.data.visuals.length) {
-            renderVisualsChunk(data.data.visuals, excalidrawAPIRef.current, { reset: true })
-            applyViewportToDiagram(excalidrawAPIRef.current)
-          } else if (data.data.algorithm) {
-            await renderAlgorithmPayload(data.data.algorithm)
-          } else {
-            await renderDiagramPayload(data.data.diagram)
-          }
-
-          if (typeof data.data.chat === 'string' && data.data.chat.trim()) {
-            const sentences = data.data.chat
-              .split(/(?<=[.!?])\s+/)
-              .map((sentence) => sentence.trim())
-              .filter(Boolean)
-
-            if (sentences.length) {
-              for (const sentence of sentences) {
-                speakSentence(sentence, requestId)
-              }
-            } else {
-              maybeResumeListening(requestId)
-            }
-          } else {
-            maybeResumeListening(requestId)
-          }
-        } else {
-          setChatMessages((prev) => [...prev, { role: 'assistant', content: `Error: ${data.error}` }])
-          maybeResumeListening(requestId)
-        }
-      } catch (error) {
-        if (requestId !== activeRequestIdRef.current) return
-        streamCompleteRef.current = true
-        setChatMessages((prev) => [...prev, { role: 'assistant', content: `Connection error: ${error.message}` }])
-        maybeResumeListening(requestId)
-      }
-    }
-
-    setLoading(false)
-
-    if (requestId === activeRequestIdRef.current && pendingUtterancesRef.current === 0) {
+      if (requestId !== activeRequestIdRef.current) return
       maybeResumeListening(requestId)
+    } catch (error) {
+      if (requestId !== activeRequestIdRef.current) return
+      const message = error instanceof Error ? error.message : 'Unknown playback error'
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: `Connection error: ${message}` }])
+      setErrorMessage(message)
+      appendLogEntry({ id: `${Date.now()}-error`, role: 'system', text: `Error: ${message}` })
+      maybeResumeListening(requestId)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -576,10 +422,16 @@ function DoubtCanvas() {
     micDenied
       ? null
       : phase === 'listening'
-        ? (liveTranscript ? `"${liveTranscript}"` : 'Listening...')
+        ? (
+            liveTranscript
+              ? `"${liveTranscript}"`
+              : speechSupported
+                ? 'Listening...'
+                : 'Ask by typing or tap the mic if your browser supports it'
+          )
         : phase === 'thinking'
           ? 'Thinking...'
-          : null
+          : currentSpeech || 'Explaining...'
 
   return (
     <>
@@ -587,10 +439,6 @@ function DoubtCanvas() {
         @keyframes fadeUp {
           from { opacity:0; transform:translateY(14px); }
           to   { opacity:1; transform:translateY(0); }
-        }
-        @keyframes speechPulse {
-          0%,100% { opacity:1; }
-          50%     { opacity:0.72; }
         }
         @keyframes listeningRing {
           0%  { box-shadow:0 0 0 0 rgba(37,99,235,0.45); }
@@ -605,6 +453,14 @@ function DoubtCanvas() {
             theme="light"
             excalidrawAPI={(api) => {
               excalidrawAPIRef.current = api
+              if (mountedRef.current) {
+                setTimeout(() => {
+                  if (mountedRef.current) {
+                    ensureScheduler()
+                    buildRecognition()
+                  }
+                }, 0)
+              }
             }}
             initialData={{ appState: { viewBackgroundColor: '#ffffff' } }}
             UIOptions={{
@@ -621,7 +477,21 @@ function DoubtCanvas() {
 
         <div style={st.topLeft}>
           <span style={st.roomTag}>{roomName}</span>
-          <button title="Clear board" onClick={resetCanvas} style={st.iconBtn}>Clear</button>
+          <button title="Clear board" onClick={() => resetBoard({ clearLog: true })} style={st.iconBtn}>Clear</button>
+          <button
+            title="Start listening"
+            onClick={() => {
+              setNeedsTap(false)
+              setMicDenied(false)
+              setErrorMessage('')
+              shouldListenRef.current = true
+              setAssistantPhase('listening')
+              startRecognition()
+            }}
+            style={st.iconBtn}
+          >
+            Mic
+          </button>
           <span style={st.clearHint}>Say "Clear" to return to class</span>
         </div>
 
@@ -631,6 +501,11 @@ function DoubtCanvas() {
           </div>
         )}
 
+        {errorMessage && !micDenied && (
+          <div style={st.errorBanner}>
+            {errorMessage}
+          </div>
+        )}
 
         {pillLabel && (
           <div
@@ -658,8 +533,17 @@ function DoubtCanvas() {
             {!logCollapsed && (
               <div style={st.logScroll}>
                 {speechLog.map((entry) => (
-                  <div key={entry.id} style={entry.role === 'user' ? st.logUser : st.logAI}>
-                    {entry.role === 'user' ? 'Mic ' : 'AI '}{entry.text}
+                  <div
+                    key={entry.id}
+                    style={
+                      entry.role === 'user'
+                        ? st.logUser
+                        : entry.role === 'system'
+                          ? st.logSystem
+                          : st.logAI
+                    }
+                  >
+                    {entry.role === 'user' ? 'Mic ' : entry.role === 'system' ? 'System ' : 'AI '}{entry.text}
                   </div>
                 ))}
                 <div ref={logEndRef} />
@@ -668,11 +552,35 @@ function DoubtCanvas() {
           </div>
         )}
 
+        <form
+          style={st.askBar}
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (phase === 'speaking') {
+              schedulerRef.current?.cancel({ resetBoard: false })
+              setCurrentSpeech('')
+            }
+            void handleQuestion(manualQuestion)
+          }}
+        >
+          <input
+            type="text"
+            value={manualQuestion}
+            onChange={(event) => setManualQuestion(event.target.value)}
+            placeholder="Ask any doubt: Explain DSU, Water Cycle, Newton's Laws..."
+            style={st.askInput}
+          />
+          <button type="submit" style={st.askBtn} disabled={!manualQuestion.trim()}>
+            Ask
+          </button>
+        </form>
+
         {needsTap && (
           <div
             style={st.tapOverlay}
             onClick={() => {
               setNeedsTap(false)
+              setErrorMessage('')
               shouldListenRef.current = true
               setAssistantPhase('listening')
               startRecognition()
@@ -752,35 +660,23 @@ const st = {
     textAlign: 'center',
     maxWidth: '400px',
   },
-  speechBubble: {
+  errorBanner: {
     position: 'absolute',
-    bottom: '5.5rem',
+    top: '5rem',
     left: '50%',
     transform: 'translateX(-50%)',
-    zIndex: 30,
-    maxWidth: 'min(660px, 82vw)',
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '0.6rem',
-    background: 'rgba(15,23,42,0.84)',
-    backdropFilter: 'blur(14px)',
-    border: '1px solid rgba(99,102,241,0.3)',
-    borderRadius: '18px',
-    padding: '0.75rem 1.25rem',
-    boxShadow: '0 8px 32px rgba(15,23,42,0.2)',
-    animation: 'fadeUp 0.2s ease',
-    pointerEvents: 'none',
+    zIndex: 40,
+    maxWidth: 'min(680px, 92vw)',
+    background: 'rgba(255,241,242,0.97)',
+    border: '1px solid #fda4af',
+    borderRadius: '14px',
+    padding: '0.8rem 1rem',
+    color: '#9f1239',
+    fontWeight: 600,
+    fontSize: '0.92rem',
+    boxShadow: '0 10px 24px rgba(15,23,42,0.1)',
+    textAlign: 'center',
   },
-  speechDot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    background: '#818cf8',
-    flexShrink: 0,
-    marginTop: '0.4rem',
-    animation: 'speechPulse 1.4s ease-in-out infinite',
-  },
-  speechText: { color: '#e2e8f0', fontSize: '1rem', lineHeight: 1.55, fontWeight: 500 },
   statusPill: {
     position: 'absolute',
     bottom: '2rem',
@@ -842,6 +738,43 @@ const st = {
     background: 'transparent',
     overflow: 'hidden',
   },
+  askBar: {
+    position: 'absolute',
+    left: '50%',
+    bottom: '6.8rem',
+    transform: 'translateX(-50%)',
+    zIndex: 35,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.6rem',
+    width: 'min(760px, 78vw)',
+    background: 'rgba(255,255,255,0.95)',
+    border: '1px solid rgba(203,213,225,0.85)',
+    borderRadius: '18px',
+    padding: '0.55rem',
+    boxShadow: '0 14px 32px rgba(15,23,42,0.12)',
+    backdropFilter: 'blur(14px)',
+  },
+  askInput: {
+    flex: 1,
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    color: '#0f172a',
+    fontSize: '0.96rem',
+    padding: '0.6rem 0.8rem',
+  },
+  askBtn: {
+    border: 'none',
+    borderRadius: '12px',
+    background: '#2563eb',
+    color: '#ffffff',
+    fontWeight: 700,
+    fontSize: '0.9rem',
+    padding: '0.75rem 1rem',
+    cursor: 'pointer',
+    minWidth: '88px',
+  },
   logHeader: {
     display: 'flex',
     alignItems: 'center',
@@ -890,6 +823,15 @@ const st = {
     wordBreak: 'break-word',
     textShadow: '0 1px 6px rgba(0,0,0,0.6)',
     fontWeight: 400,
+  },
+  logSystem: {
+    fontSize: '0.8rem',
+    color: 'rgba(253,164,175,0.98)',
+    lineHeight: 1.5,
+    padding: '0.15rem 0',
+    wordBreak: 'break-word',
+    textShadow: '0 1px 6px rgba(0,0,0,0.6)',
+    fontWeight: 600,
   },
 }
 

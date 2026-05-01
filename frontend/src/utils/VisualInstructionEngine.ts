@@ -16,7 +16,7 @@ export type VisualInstruction = {
   type: 'shape' | 'text' | 'line' | 'arrow'
   content: string
   position: { x: number; y: number }
-  style?: { color?: string; highlight?: boolean }
+  style?: { color?: string; highlight?: boolean; shape?: 'rectangle' | 'ellipse' | 'diamond' | 'triangle' }
 }
 
 function randomSeed() {
@@ -100,6 +100,8 @@ function visualToElements(visual: VisualInstruction): SceneElement[] {
   const y = Number.isFinite(visual.position?.y) ? visual.position.y : 180
   const content = String(visual.content || '')
 
+  const shapeType = (visual.style?.shape || 'rectangle') as string
+
   switch (visual.type) {
     case 'text':
       return [textElement(x, y, content, highlight ? 28 : 24, color)]
@@ -113,7 +115,17 @@ function visualToElements(visual: VisualInstruction): SceneElement[] {
         lineElement(x, y, color, true),
         ...(content ? [textElement(x + 60, y - 28, content, 18, COLORS.muted)] : []),
       ]
-    case 'shape':
+    case 'shape': {
+      const shape = baseElement(shapeType, x, y, 120, 68, {
+        strokeColor: color,
+        backgroundColor: highlight ? `${color}22` : '#ffffff',
+        strokeWidth: highlight ? 3 : 2,
+      })
+      return [
+        shape,
+        ...(content ? [textElement(x + 60, y + 22, content, 20, COLORS.ink)] : []),
+      ]
+    }
     default:
       return [
         rectangleElement(x, y, 120, 68, color, highlight),

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { BACKEND_URL } from '../utils/backendUrl'
 
 function Voice() {
   const [loading, setLoading] = useState(false)
@@ -153,7 +154,7 @@ function Voice() {
     setChatMessages((prev) => [...prev, { role: 'user', content: text }])
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/chat`, {
+      const response = await fetch(`${BACKEND_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
