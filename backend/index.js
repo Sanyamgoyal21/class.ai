@@ -8,9 +8,36 @@ import { setupSocketHandlers, getDeviceRegistry, getDeviceVideoState } from "./s
 import axios from "axios";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const ATTENDANCE_SERVICE_URL = (process.env.ATTENDANCE_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
 
 function sseWrite(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+async function proxyAttendanceRequest(res, config) {
+  try {
+    const response = await axios({
+      timeout: 45000,
+      validateStatus: () => true,
+      ...config,
+    });
+
+    if (response.status >= 400) {
+      return res.status(response.status).json(
+        response.data && typeof response.data === "object"
+          ? response.data
+          : { error: "Attendance service error", detail: response.data }
+      );
+    }
+
+    return res.status(response.status).json(response.data);
+  } catch (error) {
+    console.error("Attendance proxy error:", error.message);
+    return res.status(502).json({
+      error: "Attendance service unavailable",
+      detail: error.message,
+    });
+  }
 }
 
 async function callOpenRouter(systemPrompt, userMessage) {
@@ -2135,7 +2162,8 @@ const io = new Server(httpServer, {
 });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '30mb' }));
+app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
 setupSocketHandlers(io);
 
@@ -2291,6 +2319,78 @@ app.post("/api/video/stop", (req, res) => {
 
 app.get("/api/video/state", (req, res) => {
   res.json(getDeviceVideoState());
+});
+
+app.get("/api/attendance/health", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "get",
+    url: `${ATTENDANCE_SERVICE_URL}/health`,
+  });
+});
+
+app.get("/api/attendance/students", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "get",
+    url: `${ATTENDANCE_SERVICE_URL}/attendance/students`,
+  });
+});
+
+app.post("/api/attendance/students/register", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "post",
+    url: `${ATTENDANCE_SERVICE_URL}/attendance/students/register`,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    data: req.body,
+  });
+});
+
+app.post("/api/attendance/live/start", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "post",
+    url: `${ATTENDANCE_SERVICE_URL}/attendance/live/start`,
+    data: req.body,
+  });
+});
+
+app.post("/api/attendance/live/stop", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "post",
+    url: `${ATTENDANCE_SERVICE_URL}/attendance/live/stop`,
+    data: req.body,
+  });
+});
+
+app.get("/api/attendance/live/status", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "get",
+    url: `${ATTENDANCE_SERVICE_URL}/attendance/live/status`,
+  });
+});
+
+app.get("/api/attendance/records", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "get",
+    url: `${ATTENDANCE_SERVICE_URL}/attendance/records`,
+    params: req.query,
+  });
+});
+
+app.post("/api/attendance/records/manual", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "post",
+    url: `${ATTENDANCE_SERVICE_URL}/attendance/records/manual`,
+    data: req.body,
+  });
+});
+
+app.patch("/api/attendance/records/:recordId", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "patch",
+    url: `${ATTENDANCE_SERVICE_URL}/attendance/records/${req.params.recordId}`,
+    data: req.body,
+  });
 });
 
 app.get("/api/doubt/stream", async (req, res) => {

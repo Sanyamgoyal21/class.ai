@@ -135,6 +135,36 @@ export function setupSocketHandlers(io) {
       });
     });
 
+    socket.on("attendance:live-update", (data) => {
+      const device = deviceRegistry.get(socket.id);
+      io.to("device:dashboard").emit("attendance:live-update", {
+        ...data,
+        deviceId: device?.deviceId,
+        deviceName: device?.name,
+        receivedAt: new Date().toISOString(),
+      });
+    });
+
+    socket.on("attendance:service-status", (data) => {
+      const device = deviceRegistry.get(socket.id);
+      io.to("device:dashboard").emit("attendance:service-status", {
+        ...data,
+        deviceId: device?.deviceId,
+        deviceName: device?.name,
+        receivedAt: new Date().toISOString(),
+      });
+    });
+
+    socket.on("attendance:student-registered", (data) => {
+      const device = deviceRegistry.get(socket.id);
+      io.to("device:dashboard").emit("attendance:student-registered", {
+        ...data,
+        deviceId: device?.deviceId,
+        deviceName: device?.name,
+        receivedAt: new Date().toISOString(),
+      });
+    });
+
     // Presence updates from classroom (who is in frame)
     socket.on("presence:update", (data) => {
       const device = deviceRegistry.get(socket.id);
