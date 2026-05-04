@@ -25,13 +25,7 @@ function attendanceUrl(pathname) {
 }
 
 function resolvePythonExecutable() {
-  const candidates = [
-    path.join(AGENTIC_BACKEND_ROOT, ".venv", "Scripts", "python.exe"),
-    path.join(AGENTIC_BACKEND_ROOT, ".venv", "bin", "python"),
-    process.env.PYTHON || "python",
-  ];
-
-  return candidates.find((candidate) => fs.existsSync(candidate)) || "python";
+  return process.env.PYTHON || "python";
 }
 
 async function waitForAttendanceService(url, timeoutMs = 15000) {
@@ -2446,6 +2440,24 @@ app.get("/api/attendance/students", async (req, res) => {
   });
 });
 
+app.post("/api/attendance/reload-encodings", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "post",
+    url: attendanceUrl("/attendance/reload-encodings"),
+    headers: { "Content-Type": "application/json" },
+    data: {},
+  });
+});
+
+app.post("/api/attendance/detect-face", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "post",
+    url: attendanceUrl("/attendance/detect-face"),
+    headers: { "Content-Type": "application/json" },
+    data: req.body,
+  });
+});
+
 app.post("/api/attendance/students/register", async (req, res) => {
   console.log("[attendance-proxy] register student route", {
     bodySize: req.body ? JSON.stringify(req.body).length : 0,
@@ -2482,6 +2494,22 @@ app.get("/api/attendance/live/status", async (req, res) => {
     method: "get",
     url: attendanceUrl("/attendance/live/status"),
   });
+});
+
+app.get("/api/attendance/live/stream", async (req, res) => {
+  try {
+    const pythonRes = await axios.get(attendanceUrl("/attendance/live/stream"), {
+      responseType: "stream",
+      timeout: 0,
+    });
+    res.setHeader("Content-Type", pythonRes.headers["content-type"] || "multipart/x-mixed-replace; boundary=frame");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    pythonRes.data.pipe(res);
+    req.on("close", () => pythonRes.data.destroy());
+  } catch (err) {
+    if (!res.headersSent) res.status(503).json({ error: "stream unavailable" });
+  }
 });
 
 app.get("/api/attendance/records", async (req, res) => {

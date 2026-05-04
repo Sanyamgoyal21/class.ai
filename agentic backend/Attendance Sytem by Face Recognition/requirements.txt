@@ -1,4 +1,0 @@
-opencv-python
-face-recognition
-numpy
-pandas
