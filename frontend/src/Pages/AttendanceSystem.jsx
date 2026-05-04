@@ -1,6 +1,6 @@
 import React from 'react'
 import FaceCapturePanel from '../components/attendance/FaceCapturePanel.jsx'
-import { BACKEND_URL } from '../utils/backendUrl'
+import { ATTENDANCE_API_URL } from '../utils/backendUrl'
 
 const today = new Date().toISOString().slice(0, 10)
 
@@ -29,19 +29,26 @@ function AttendanceSystem({ teacherMode = false }) {
 
   const videoRef = React.useRef(null)
   const streamRef = React.useRef(null)
+  const canvasRef = React.useRef(null)
+  const detectionIntervalRef = React.useRef(null)
+  const isDetectingRef = React.useRef(false)
+  const liveCameraOpenRef = React.useRef(false)
+  const [faceDetected, setFaceDetected] = React.useState(false)
 
   const loadStudents = React.useCallback(async () => {
-    const response = await fetch(`${BACKEND_URL}/attendance/students`)
+    const response = await fetch(`${ATTENDANCE_API_URL}/students`)
     const payload = await response.json()
     if (!response.ok) throw new Error(payload.detail || payload.error || 'Failed to load students')
     setStudents(payload.students || [])
   }, [])
 
   const loadLiveStatus = React.useCallback(async () => {
-    const response = await fetch(`${BACKEND_URL}/attendance/live/status`)
+    const response = await fetch(`${ATTENDANCE_API_URL}/live/status`)
     const payload = await response.json()
     if (!response.ok) throw new Error(payload.detail || payload.error || 'Failed to load live status')
-    setLive(payload.live || { running: false, recentDetections: [] })
+    const liveData = payload.live || { running: false, recentDetections: [] }
+    liveCameraOpenRef.current = !!liveData.cameraOpen
+    setLive(liveData)
   }, [])
 
   const loadRecords = React.useCallback(async () => {
@@ -50,7 +57,7 @@ function AttendanceSystem({ teacherMode = false }) {
     if (filters.className) params.set('className', filters.className)
     if (filters.section) params.set('section', filters.section)
 
-    const response = await fetch(`${BACKEND_URL}/attendance/records?${params.toString()}`)
+    const response = await fetch(`${ATTENDANCE_API_URL}/records?${params.toString()}`)
     const payload = await response.json()
     if (!response.ok) throw new Error(payload.detail || payload.error || 'Failed to load attendance records')
     setRecords(payload.records || [])
@@ -89,6 +96,49 @@ function AttendanceSystem({ teacherMode = false }) {
     return () => stopCamera()
   }, [])
 
+  const startFaceDetectionLoop = React.useCallback(() => {
+    detectionIntervalRef.current = setInterval(async () => {
+      if (isDetectingRef.current || !videoRef.current || !canvasRef.current) return
+      const video = videoRef.current
+      if (!video.videoWidth || !video.videoHeight) return
+      // don't call detect-face while live attendance has the camera open — they share the same physical webcam
+      if (liveCameraOpenRef.current) return
+      isDetectingRef.current = true
+      try {
+        const tmp = document.createElement('canvas')
+        tmp.width = video.videoWidth
+        tmp.height = video.videoHeight
+        tmp.getContext('2d').drawImage(video, 0, 0)
+        const frameData = tmp.toDataURL('image/jpeg', 0.5)
+        const res = await fetch(`${ATTENDANCE_API_URL}/detect-face`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: frameData }),
+        })
+        const data = await res.json()
+        const overlay = canvasRef.current
+        if (!overlay) return
+        overlay.width = video.videoWidth
+        overlay.height = video.videoHeight
+        const ctx = overlay.getContext('2d')
+        ctx.clearRect(0, 0, overlay.width, overlay.height)
+        if (data.face) {
+          const { top, right, bottom, left } = data.face
+          ctx.strokeStyle = '#00ff00'
+          ctx.lineWidth = 3
+          ctx.strokeRect(left, top, right - left, bottom - top)
+          setFaceDetected(true)
+        } else {
+          setFaceDetected(false)
+        }
+      } catch (_) {
+        // ignore network errors during detection
+      } finally {
+        isDetectingRef.current = false
+      }
+    }, 700)
+  }, [])
+
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
@@ -98,12 +148,17 @@ function AttendanceSystem({ teacherMode = false }) {
       }
       setCameraReady(true)
       setMessage('')
+      startFaceDetectionLoop()
     } catch (error) {
       setMessage(`Could not open camera: ${error.message}`)
     }
   }
 
   const stopCamera = () => {
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current)
+      detectionIntervalRef.current = null
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop())
       streamRef.current = null
@@ -111,6 +166,11 @@ function AttendanceSystem({ teacherMode = false }) {
     if (videoRef.current) {
       videoRef.current.srcObject = null
     }
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d')
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+    }
+    setFaceDetected(false)
     setCameraReady(false)
   }
 
@@ -122,21 +182,7 @@ function AttendanceSystem({ teacherMode = false }) {
     const context = canvas.getContext('2d')
     context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
     const image = canvas.toDataURL('image/jpeg', 0.92)
-    setSamples(prev => [...prev, image].slice(-5))
-  }
-
-  const dataUrlToBlob = (dataUrl) => {
-    const [header, encoded] = dataUrl.split(',')
-    const mimeMatch = header.match(/data:(.*?);base64/)
-    const mimeType = mimeMatch?.[1] || 'image/jpeg'
-    const binary = window.atob(encoded)
-    const bytes = new Uint8Array(binary.length)
-
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index)
-    }
-
-    return new Blob([bytes], { type: mimeType })
+    setSamples(prev => [...prev, image])
   }
 
   const registerStudent = async (event) => {
@@ -160,19 +206,16 @@ function AttendanceSystem({ teacherMode = false }) {
 
     setRegistering(true)
     try {
-      const formData = new FormData()
-      formData.append('name', trimmedForm.name)
-      formData.append('rollNumber', trimmedForm.rollNumber)
-      formData.append('className', trimmedForm.className)
-      formData.append('section', trimmedForm.section)
-
-      samples.forEach((sample, index) => {
-        formData.append('images', dataUrlToBlob(sample), `${trimmedForm.name || 'student'}_${index + 1}.jpg`)
-      })
-
-      const response = await fetch(`${BACKEND_URL}/attendance/students/register`, {
+      const response = await fetch(`${ATTENDANCE_API_URL}/students/register`, {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: trimmedForm.name,
+          rollNumber: trimmedForm.rollNumber,
+          className: trimmedForm.className,
+          section: trimmedForm.section,
+          images: samples,
+        }),
       })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.detail || payload.error || 'Failed to register student')
@@ -194,10 +237,22 @@ function AttendanceSystem({ teacherMode = false }) {
     }
   }
 
+  const reloadEncodings = async () => {
+    try {
+      const response = await fetch(`${ATTENDANCE_API_URL}/reload-encodings`, { method: 'POST' })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.detail || 'Failed to reload encodings')
+      setLive(prev => ({ ...prev, encodingCount: payload.encodingCount }))
+      setMessage(`Encodings reloaded: ${payload.encodingCount} face(s) loaded.`)
+    } catch (error) {
+      setMessage(error.message)
+    }
+  }
+
   const toggleLiveAttendance = async () => {
     try {
       const endpoint = live.running ? 'stop' : 'start'
-      const response = await fetch(`${BACKEND_URL}/attendance/live/${endpoint}`, {
+      const response = await fetch(`${ATTENDANCE_API_URL}/live/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
@@ -212,7 +267,7 @@ function AttendanceSystem({ teacherMode = false }) {
 
   const setAttendanceStatus = async (record, status) => {
     try {
-      const response = await fetch(`${BACKEND_URL}/attendance/records/manual`, {
+      const response = await fetch(`${ATTENDANCE_API_URL}/records/manual`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -251,6 +306,9 @@ function AttendanceSystem({ teacherMode = false }) {
           <button type="button" style={styles.secondaryButton} onClick={loadDashboard}>
             Refresh
           </button>
+          <button type="button" style={styles.secondaryButton} onClick={reloadEncodings}>
+            Reload Encodings
+          </button>
         </div>
       </section>
 
@@ -279,9 +337,14 @@ function AttendanceSystem({ teacherMode = false }) {
               <h2 style={styles.panelTitle}>Live recognition</h2>
               <p style={styles.panelText}>The FastAPI attendance camera confirms matches, fetches student metadata, and pushes the update in real time.</p>
             </div>
-            <span style={{ ...styles.statusPill, backgroundColor: live.running ? '#dcfce7' : '#e2e8f0', color: live.running ? '#166534' : '#475569' }}>
-              {live.running ? 'Camera running' : 'Camera stopped'}
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+              <span style={{ ...styles.statusPill, backgroundColor: live.cameraOpen ? '#dcfce7' : live.running ? '#fef9c3' : '#e2e8f0', color: live.cameraOpen ? '#166534' : live.running ? '#854d0e' : '#475569' }}>
+                {live.cameraOpen ? 'Camera open' : live.running ? 'Opening camera…' : 'Camera stopped'}
+              </span>
+              <span style={{ ...styles.statusPill, backgroundColor: (live.encodingCount || 0) > 0 ? '#dbeafe' : '#fee2e2', color: (live.encodingCount || 0) > 0 ? '#1d4ed8' : '#991b1b', fontSize: '0.75rem' }}>
+                {live.encodingCount || 0} face encoding{live.encodingCount !== 1 ? 's' : ''} loaded
+              </span>
+            </div>
           </div>
 
           <div style={styles.highlightCard}>
@@ -430,6 +493,8 @@ function AttendanceSystem({ teacherMode = false }) {
           stopCamera={stopCamera}
           captureSample={captureSample}
           videoRef={videoRef}
+          canvasRef={canvasRef}
+          faceDetected={faceDetected}
         />
       </section>
     </div>

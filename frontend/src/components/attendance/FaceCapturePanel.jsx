@@ -12,6 +12,8 @@ function FaceCapturePanel({
   stopCamera,
   captureSample,
   videoRef,
+  canvasRef,
+  faceDetected,
 }) {
   if (!teacherMode) return null
 
@@ -75,7 +77,15 @@ function FaceCapturePanel({
         </div>
 
         <div style={styles.cameraCard}>
-          <video ref={videoRef} autoPlay playsInline muted style={styles.video} />
+          <div style={styles.videoWrapper}>
+            <video ref={videoRef} autoPlay playsInline muted style={styles.video} />
+            <canvas ref={canvasRef} style={styles.canvas} />
+            {cameraReady && (
+              <div style={{ ...styles.faceStatus, background: faceDetected ? 'rgba(22,163,74,0.85)' : 'rgba(220,38,38,0.75)' }}>
+                {faceDetected ? 'Face detected' : 'No face detected'}
+              </div>
+            )}
+          </div>
           <div style={styles.cameraActions}>
             {!cameraReady ? (
               <button type="button" style={styles.secondaryButton} onClick={startCamera}>Open Camera</button>
@@ -178,12 +188,39 @@ const styles = {
     background: 'linear-gradient(160deg, #0f172a 0%, #134e4a 100%)',
     color: '#e2e8f0',
   },
+  videoWrapper: {
+    position: 'relative',
+    width: '100%',
+  },
   video: {
+    display: 'block',
     width: '100%',
     maxHeight: '340px',
     borderRadius: '18px',
     background: '#020617',
     objectFit: 'cover',
+  },
+  canvas: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    borderRadius: '18px',
+    pointerEvents: 'none',
+  },
+  faceStatus: {
+    position: 'absolute',
+    bottom: '10px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    padding: '4px 14px',
+    borderRadius: '999px',
+    color: '#fff',
+    fontWeight: 700,
+    fontSize: '0.82rem',
+    pointerEvents: 'none',
+    whiteSpace: 'nowrap',
   },
   cameraActions: {
     display: 'flex',

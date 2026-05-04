@@ -1,0 +1,68 @@
+{
+  "students": [
+    {
+      "id": "8bb748ed-6b59-4d4a-96c5-2ce8089488d3",
+      "name": "Sanyam Goyal",
+      "rollNumber": "R2142231332",
+      "className": "AIML",
+      "section": "B2",
+      "sampleImagePaths": [
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\Sanyam Goyal.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\Sanyam Goyal_2.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\Sanyam Goyal_3.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\Sanyam Goyal_4.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\Sanyam Goyal_5.jpg"
+      ],
+      "registeredAt": "2026-05-04T11:09:33.681116Z"
+    },
+    {
+      "id": "53570e14-0f7e-455c-a16a-51f2208b7c4b",
+      "name": "Prantik Sanko",
+      "rollNumber": "dfwef",
+      "className": "eqwd",
+      "section": "fwdf",
+      "sampleImagePaths": [
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\Prantik Sanko.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\Prantik Sanko_2.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\Prantik Sanko_3.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\Prantik Sanko_4.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\Prantik Sanko_5.jpg"
+      ],
+      "registeredAt": "2026-05-04T11:17:12.226703Z"
+    },
+    {
+      "id": "d2aad829-e692-4082-86f4-5f485b93a50c",
+      "name": "omo",
+      "rollNumber": "kmklmlk",
+      "className": "nkjnkj",
+      "section": "knmkjn",
+      "sampleImagePaths": [
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\omo.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\omo_2.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\omo_3.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\omo_4.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\omo_5.jpg"
+      ],
+      "registeredAt": "2026-05-04T11:23:59.068524Z"
+    },
+    {
+      "id": "fc94b7b5-f394-4021-ae49-50b7ea4f67ab",
+      "name": "xnZIni",
+      "rollNumber": "njkndj",
+      "className": "njdj",
+      "section": "jndskjn",
+      "sampleImagePaths": [
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\xnZIni.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\xnZIni_2.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\xnZIni_3.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\xnZIni_4.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\xnZIni_5.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\xnZIni_6.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\xnZIni_7.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\xnZIni_8.jpg",
+        "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\xnZIni_9.jpg"
+      ],
+      "registeredAt": "2026-05-04T11:28:15.486646Z"
+    }
+  ]
+}

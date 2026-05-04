@@ -1,0 +1,54 @@
+[
+  {
+    "id": "e092333a-26ca-4772-bad9-f9f3e753ea46",
+    "studentId": "fc94b7b5-f394-4021-ae49-50b7ea4f67ab",
+    "student": {
+      "name": "xnZIni",
+      "rollNumber": "njkndj",
+      "className": "njdj",
+      "section": "jndskjn"
+    },
+    "date": "2026-05-04",
+    "status": "present",
+    "markedAt": "2026-05-04T12:21:47.985516Z"
+  },
+  {
+    "id": "dd2bc1e4-c84c-4999-9424-991bf7ce3790",
+    "studentId": "8bb748ed-6b59-4d4a-96c5-2ce8089488d3",
+    "student": {
+      "name": "Sanyam Goyal",
+      "rollNumber": "R2142231332",
+      "className": "AIML",
+      "section": "B2"
+    },
+    "date": "2026-05-04",
+    "status": "absent",
+    "markedAt": "2026-05-04T12:21:21.041257Z"
+  },
+  {
+    "id": "781a49e3-8c5a-4457-8cd4-5276e5f9e78d",
+    "studentId": "53570e14-0f7e-455c-a16a-51f2208b7c4b",
+    "student": {
+      "name": "Prantik Sanko",
+      "rollNumber": "dfwef",
+      "className": "eqwd",
+      "section": "fwdf"
+    },
+    "date": "2026-05-04",
+    "status": "absent",
+    "markedAt": "2026-05-04T12:21:22.694763Z"
+  },
+  {
+    "id": "6022096c-ccf8-4354-a22f-6a6ef2112aff",
+    "studentId": "d2aad829-e692-4082-86f4-5f485b93a50c",
+    "student": {
+      "name": "omo",
+      "rollNumber": "kmklmlk",
+      "className": "nkjnkj",
+      "section": "knmkjn"
+    },
+    "date": "2026-05-04",
+    "status": "present",
+    "markedAt": "2026-05-04T12:21:47.263150Z"
+  }
+]
