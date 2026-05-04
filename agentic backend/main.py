@@ -11,7 +11,10 @@ It connects to the Supernode (Node.js backend) and handles:
 - Camera/Display streaming
 
 Usage:
-    # Run as classroom device (default)
+    # Run the FastAPI control plane (default)
+    python main.py
+
+    # Run as classroom device
     python main.py --mode classroom --name "Classroom 1" --url http://localhost:5000
 
     # Run as gate camera
@@ -22,7 +25,41 @@ Usage:
 """
 
 import argparse
+import os
+import subprocess
 import sys
+
+from config import ATTENDANCE_SERVICE_PORT
+
+
+def _normalize_path(value: str) -> str:
+    return os.path.normcase(os.path.abspath(value))
+
+
+def _preferred_python_candidates() -> list[str]:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base_dir, ".venv", "Scripts", "python.exe"),
+        os.path.join(os.path.dirname(base_dir), ".venv", "Scripts", "python.exe"),
+    ]
+    return [candidate for candidate in candidates if os.path.exists(candidate)]
+
+
+def ensure_preferred_python() -> None:
+    """Re-exec under the repo venv if the script was launched with a different Python."""
+    if os.environ.get("CLASS_AI_SKIP_REEXEC") == "1":
+        return
+
+    current = _normalize_path(sys.executable)
+    for candidate in _preferred_python_candidates():
+        normalized_candidate = _normalize_path(candidate)
+        if normalized_candidate == current:
+            return
+
+        env = os.environ.copy()
+        env["CLASS_AI_SKIP_REEXEC"] = "1"
+        print(f"Switching to project Python: {candidate}", flush=True)
+        raise SystemExit(subprocess.call([candidate, *sys.argv], env=env))
 
 
 def run_classroom(args):
@@ -72,12 +109,28 @@ def run_gate(args):
     runner.start()
 
 
+def run_api(args):
+    import uvicorn
+
+    print("=" * 50)
+    print("  AGENTIC BACKEND API")
+    print(f"  Host: {args.host}")
+    print(f"  Port: {args.port}")
+    print("=" * 50)
+
+    uvicorn.run("attendance_api:app", host=args.host, port=args.port, reload=args.reload)
+
+
 def main():
+    ensure_preferred_python()
+
     parser = argparse.ArgumentParser(
-        description="Agentic Backend - Classroom/Gate Device Runner",
+        description="Agentic Backend - FastAPI + Device Runner",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  python main.py
+  python main.py --mode api --port 8000
   python main.py --mode classroom --name "Room 101"
   python main.py --mode gate --name "Main Entrance"
   python main.py --mode classroom --no-face --no-vad  # Streaming only
@@ -87,9 +140,9 @@ Examples:
     # Mode selection
     parser.add_argument(
         "--mode", "-m",
-        choices=["classroom", "gate"],
-        default="classroom",
-        help="Device mode: 'classroom' or 'gate' (default: classroom)"
+        choices=["api", "classroom", "gate"],
+        default="api",
+        help="Run mode: 'api', 'classroom', or 'gate' (default: api)"
     )
 
     # Connection settings
@@ -115,6 +168,22 @@ Examples:
         "--faces-dir",
         default="face_module/data/faces",
         help="Directory containing known faces"
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="FastAPI host when --mode api (default: 0.0.0.0)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=ATTENDANCE_SERVICE_PORT,
+        help=f"FastAPI port when --mode api (default: {ATTENDANCE_SERVICE_PORT})"
+    )
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Enable FastAPI auto-reload in api mode"
     )
 
     # Feature toggles
@@ -157,7 +226,9 @@ Examples:
 
     # Run the appropriate mode
     try:
-        if args.mode == "classroom":
+        if args.mode == "api":
+            run_api(args)
+        elif args.mode == "classroom":
             run_classroom(args)
         elif args.mode == "gate":
             run_gate(args)

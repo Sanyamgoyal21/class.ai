@@ -9,14 +9,25 @@ from datetime import datetime
 try:
     from pymongo import MongoClient
     from bson.binary import Binary
+    from bson import ObjectId
 except Exception:
     MongoClient = None
     Binary = None
+    ObjectId = None
 
 import cv2
 import numpy as np
 
-from config import MONGO_URI, DB_NAME, FACES_COLLECTION, ATT_COLLECTION, TALK_COLLECTION, USE_MONGO
+from config import (
+    MONGO_URI,
+    DB_NAME,
+    FACES_COLLECTION,
+    ATT_COLLECTION,
+    TALK_COLLECTION,
+    STUDENTS_COLLECTION,
+    ATTENDANCE_RECORDS_COLLECTION,
+    USE_MONGO,
+)
 
 _client = None
 _db = None
@@ -31,6 +42,24 @@ def _ensure_connected():
     if _client is None:
         _client = MongoClient(MONGO_URI)
         _db = _client[DB_NAME]
+        _db[STUDENTS_COLLECTION].create_index("rollNumber", unique=True)
+        _db[ATTENDANCE_RECORDS_COLLECTION].create_index(
+            [("studentId", 1), ("date", 1)],
+            unique=True,
+        )
+
+
+def get_database():
+    _ensure_connected()
+    return _db
+
+
+def to_object_id(value):
+    if ObjectId is None:
+        raise RuntimeError("bson is not available. Install pymongo to enable MongoDB support.")
+    if isinstance(value, ObjectId):
+        return value
+    return ObjectId(value)
 
 
 def save_face(name: str, filename: str, image_bytes: bytes, timestamp: datetime = None):

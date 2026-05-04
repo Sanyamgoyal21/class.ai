@@ -4,6 +4,9 @@ numpy
 Pillow
 webrtcvad
 pymongo
+fastapi
+uvicorn
+python-multipart
 
 # Optional / advanced features
 face_recognition

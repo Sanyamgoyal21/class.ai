@@ -3,10 +3,9 @@ import Voice from './Pages/Voice.jsx'
 import SuperNode from './Pages/SuperNode.jsx'
 import CameraMonitor from './Pages/CameraMonitor.jsx'
 import DoubtCanvas from './Pages/DoubtCanvas.jsx'
+import GateAttendance from './Pages/GateAttendance.jsx'
 import { BACKEND_URL } from './utils/backendUrl'
 import './App.css'
-
-const SUPERNODE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
 
 export default function App() {
   const initialPage = new URLSearchParams(window.location.search).get('page') || 'launcher'
@@ -15,15 +14,9 @@ export default function App() {
 
   React.useEffect(() => {
     try {
-<<<<<<< HEAD
       window.localStorage.setItem('classroomBackendUrl', BACKEND_URL)
     } catch {
       // Ignore storage failures and rely on the query param fallback.
-=======
-      localStorage.setItem('supernodeUrl', SUPERNODE_URL)
-    } catch {
-      // Ignore storage failures and keep runtime fallback behavior.
->>>>>>> f729f70c1be5b521f354eb6f8212d8ea26ee3c3d
     }
   }, [])
 
@@ -44,14 +37,10 @@ export default function App() {
     event.preventDefault()
     const trimmedRoom = roomNumber.trim()
     if (!trimmedRoom) return
-<<<<<<< HEAD
-    window.location.href = `/classroom.html?name=${encodeURIComponent(trimmedRoom)}&backend=${encodeURIComponent(BACKEND_URL)}`
-=======
     const classroomUrl = new URL('/classroom.html', window.location.origin)
     classroomUrl.searchParams.set('name', trimmedRoom)
-    classroomUrl.searchParams.set('backend', SUPERNODE_URL)
+    classroomUrl.searchParams.set('backend', BACKEND_URL)
     window.location.href = classroomUrl.toString()
->>>>>>> f729f70c1be5b521f354eb6f8212d8ea26ee3c3d
   }
 
   // DoubtCanvas is fullscreen - no nav
@@ -108,6 +97,17 @@ export default function App() {
               </button>
             </form>
           </article>
+
+          <article className="launcher__card launcher__card--attendance">
+            <span className="launcher__badge launcher__badge--cool">Gate Attendance</span>
+            <h2 className="launcher__cardTitle">Attendance capture at the gate</h2>
+            <p className="launcher__cardText">
+              Start gate attendance here so the gate camera can detect students and mark attendance automatically.
+            </p>
+            <button type="button" className="launcher__primaryBtn launcher__primaryBtn--attendance" onClick={() => navigateToPage('attendance')}>
+              Open Gate Attendance
+            </button>
+          </article>
         </section>
       </main>
     )
@@ -145,6 +145,12 @@ export default function App() {
           >
             Voice Assistant
           </button>
+          <button
+            onClick={() => navigateToPage('attendance')}
+            className={`topbar__tab ${currentPage === 'attendance' ? 'topbar__tab--active' : ''}`}
+          >
+            Gate Attendance
+          </button>
         </div>
         <div className="topbar__status" aria-label="Connection status">
           <span className="topbar__status-dot" />
@@ -154,6 +160,7 @@ export default function App() {
       {currentPage === 'supernode' && <SuperNode />}
       {currentPage === 'cameras' && <CameraMonitor />}
       {currentPage === 'voice' && <Voice />}
+      {currentPage === 'attendance' && <GateAttendance />}
     </div>
   )
 }

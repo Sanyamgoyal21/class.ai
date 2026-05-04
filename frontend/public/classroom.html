@@ -469,7 +469,7 @@
         normalizeUrl(window.SUPERNODE_URL) ||
         normalizeUrl(sessionStorage.getItem('classroomBackendUrl')) ||
         normalizeUrl(localStorage.getItem('classroomBackendUrl'));
-      const localBackendUrl = `${currentUrl.protocol}//${currentUrl.hostname}:5000`;
+      const localBackendUrl = `${currentUrl.protocol}//${currentUrl.hostname}:8000`;
 
       if (configuredUrl) {
         const configuredHost = new URL(configuredUrl).hostname;
@@ -484,7 +484,7 @@
       }
 
       if (isLocalHost(currentUrl.hostname)) return localBackendUrl;
-      if (currentUrl.port && currentUrl.port !== '5000') return localBackendUrl;
+      if (currentUrl.port && currentUrl.port !== '8000') return localBackendUrl;
       const inferredUrl = currentUrl.origin.replace(/\/$/, '');
       sessionStorage.setItem('classroomBackendUrl', inferredUrl);
       localStorage.setItem('classroomBackendUrl', inferredUrl);

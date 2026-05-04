@@ -6,20 +6,131 @@ import { Server } from "socket.io";
 import { generateResponse, getHealthStatus } from "./ai-orchestrator.js";
 import { setupSocketHandlers, getDeviceRegistry, getDeviceVideoState } from "./socket-handlers.js";
 import axios from "axios";
+import fs from "fs";
+import path from "path";
+import { spawn } from "child_process";
+import { fileURLToPath } from "url";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const ATTENDANCE_SERVICE_URL = (process.env.ATTENDANCE_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
+const DEFAULT_ATTENDANCE_SERVICE_URL = (process.env.ATTENDANCE_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
+let attendanceServiceUrl = DEFAULT_ATTENDANCE_SERVICE_URL;
+let attendanceServiceStartupPromise = null;
+const AGENTIC_BACKEND_ROOT = path.resolve(__dirname, "..", "agentic backend");
+const AGENTIC_BACKEND_SCRIPT = path.join(AGENTIC_BACKEND_ROOT, "main.py");
+
+function attendanceUrl(pathname) {
+  return `${attendanceServiceUrl}${pathname}`;
+}
+
+function resolvePythonExecutable() {
+  const candidates = [
+    path.join(AGENTIC_BACKEND_ROOT, ".venv", "Scripts", "python.exe"),
+    path.join(AGENTIC_BACKEND_ROOT, ".venv", "bin", "python"),
+    process.env.PYTHON || "python",
+  ];
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) || "python";
+}
+
+async function waitForAttendanceService(url, timeoutMs = 15000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const response = await axios.get(`${url}/health`, {
+        timeout: 2000,
+        validateStatus: () => true,
+      });
+      if (response.status >= 200 && response.status < 500) {
+        return true;
+      }
+    } catch (error) {
+      // ignore and retry
+    }
+    await wait(500);
+  }
+  return false;
+}
+
+async function ensureAttendanceServiceRunning() {
+  if (process.env.ATTENDANCE_SERVICE_URL) {
+    attendanceServiceUrl = DEFAULT_ATTENDANCE_SERVICE_URL;
+    return;
+  }
+
+  if (await waitForAttendanceService(DEFAULT_ATTENDANCE_SERVICE_URL, 1000)) {
+    attendanceServiceUrl = DEFAULT_ATTENDANCE_SERVICE_URL;
+    return;
+  }
+
+  const localUrl = "http://127.0.0.1:8000";
+  if (await waitForAttendanceService(localUrl, 1000)) {
+    attendanceServiceUrl = localUrl;
+    return;
+  }
+
+  if (!fs.existsSync(AGENTIC_BACKEND_SCRIPT)) {
+    console.error("[attendance-proxy] could not find agentic backend script:", AGENTIC_BACKEND_SCRIPT);
+    return;
+  }
+
+  const python = resolvePythonExecutable();
+  console.log("[attendance-proxy] starting local agentic backend service with Python:", python);
+
+  const child = spawn(python, [AGENTIC_BACKEND_SCRIPT, "--mode", "api", "--host", "127.0.0.1", "--port", "8000"], {
+    cwd: AGENTIC_BACKEND_ROOT,
+    env: { ...process.env, PYTHONUNBUFFERED: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  child.stdout.on("data", (chunk) => {
+    process.stdout.write(`[agentic-backend] ${chunk}`);
+  });
+  child.stderr.on("data", (chunk) => {
+    process.stderr.write(`[agentic-backend] ${chunk}`);
+  });
+  child.on("exit", (code, signal) => {
+    console.error(`[attendance-proxy] agentic backend exited: code=${code} signal=${signal}`);
+  });
+
+  if (await waitForAttendanceService(localUrl, 20000)) {
+    attendanceServiceUrl = localUrl;
+    console.log("[attendance-proxy] local agentic backend is ready at", localUrl);
+  } else {
+    console.error("[attendance-proxy] local agentic backend did not become ready at", localUrl);
+  }
+}
+
+attendanceServiceStartupPromise = ensureAttendanceServiceRunning();
 
 function sseWrite(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
 async function proxyAttendanceRequest(res, config) {
+  if (attendanceServiceStartupPromise) {
+    await attendanceServiceStartupPromise;
+  }
+
+  console.log("[attendance-proxy] forwarding request:", {
+    method: config.method?.toUpperCase(),
+    url: config.url,
+    params: config.params,
+    headers: config.headers,
+    bodySize: config.data ? JSON.stringify(config.data).length : 0,
+  });
+
   try {
     const response = await axios({
       timeout: 45000,
       validateStatus: () => true,
       ...config,
+    });
+
+    console.log("[attendance-proxy] response:", {
+      status: response.status,
+      data: response.data && typeof response.data === "object" ? response.data : response.data,
     });
 
     if (response.status >= 400) {
@@ -2324,21 +2435,25 @@ app.get("/api/video/state", (req, res) => {
 app.get("/api/attendance/health", async (req, res) => {
   return proxyAttendanceRequest(res, {
     method: "get",
-    url: `${ATTENDANCE_SERVICE_URL}/health`,
+    url: attendanceUrl("/health"),
   });
 });
 
 app.get("/api/attendance/students", async (req, res) => {
   return proxyAttendanceRequest(res, {
     method: "get",
-    url: `${ATTENDANCE_SERVICE_URL}/attendance/students`,
+    url: attendanceUrl("/attendance/students"),
   });
 });
 
 app.post("/api/attendance/students/register", async (req, res) => {
+  console.log("[attendance-proxy] register student route", {
+    bodySize: req.body ? JSON.stringify(req.body).length : 0,
+    serviceUrl: attendanceServiceUrl,
+  });
   return proxyAttendanceRequest(res, {
     method: "post",
-    url: `${ATTENDANCE_SERVICE_URL}/attendance/students/register`,
+    url: attendanceUrl("/attendance/students/register"),
     headers: {
       "Content-Type": "application/json",
     },
@@ -2349,7 +2464,7 @@ app.post("/api/attendance/students/register", async (req, res) => {
 app.post("/api/attendance/live/start", async (req, res) => {
   return proxyAttendanceRequest(res, {
     method: "post",
-    url: `${ATTENDANCE_SERVICE_URL}/attendance/live/start`,
+    url: attendanceUrl("/attendance/live/start"),
     data: req.body,
   });
 });
@@ -2357,7 +2472,7 @@ app.post("/api/attendance/live/start", async (req, res) => {
 app.post("/api/attendance/live/stop", async (req, res) => {
   return proxyAttendanceRequest(res, {
     method: "post",
-    url: `${ATTENDANCE_SERVICE_URL}/attendance/live/stop`,
+    url: attendanceUrl("/attendance/live/stop"),
     data: req.body,
   });
 });
@@ -2365,14 +2480,14 @@ app.post("/api/attendance/live/stop", async (req, res) => {
 app.get("/api/attendance/live/status", async (req, res) => {
   return proxyAttendanceRequest(res, {
     method: "get",
-    url: `${ATTENDANCE_SERVICE_URL}/attendance/live/status`,
+    url: attendanceUrl("/attendance/live/status"),
   });
 });
 
 app.get("/api/attendance/records", async (req, res) => {
   return proxyAttendanceRequest(res, {
     method: "get",
-    url: `${ATTENDANCE_SERVICE_URL}/attendance/records`,
+    url: attendanceUrl("/attendance/records"),
     params: req.query,
   });
 });
@@ -2380,7 +2495,7 @@ app.get("/api/attendance/records", async (req, res) => {
 app.post("/api/attendance/records/manual", async (req, res) => {
   return proxyAttendanceRequest(res, {
     method: "post",
-    url: `${ATTENDANCE_SERVICE_URL}/attendance/records/manual`,
+    url: attendanceUrl("/attendance/records/manual"),
     data: req.body,
   });
 });
@@ -2388,7 +2503,7 @@ app.post("/api/attendance/records/manual", async (req, res) => {
 app.patch("/api/attendance/records/:recordId", async (req, res) => {
   return proxyAttendanceRequest(res, {
     method: "patch",
-    url: `${ATTENDANCE_SERVICE_URL}/attendance/records/${req.params.recordId}`,
+    url: attendanceUrl(`/attendance/records/${req.params.recordId}`),
     data: req.body,
   });
 });

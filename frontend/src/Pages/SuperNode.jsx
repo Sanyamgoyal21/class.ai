@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
 import { BACKEND_URL } from '../utils/backendUrl'
+import AttendanceSystem from './AttendanceSystem.jsx'
 
 const SUPERNODE_URL = BACKEND_URL
 
@@ -80,6 +81,7 @@ function SuperNode() {
   // Emergency broadcast state
   const [emergencyMessage, setEmergencyMessage] = useState('')
   const [showEmergencyModal, setShowEmergencyModal] = useState(false)
+  const [activePanel, setActivePanel] = useState('control')
 
   // Save presets to localStorage when changed
   useEffect(() => {
@@ -434,8 +436,73 @@ function SuperNode() {
   const classroomDevices = devices.filter(d => d.type === 'classroom')
   const onlineCount = classroomDevices.filter(d => d.status === 'online').length
 
+  if (activePanel === 'attendance') {
+    return (
+      <div style={styles.container}>
+        <div style={styles.dashboardSwitcher}>
+          <button
+            type="button"
+            style={{
+              ...styles.switcherButton,
+              ...(activePanel === 'control' ? styles.switcherButtonActive : null),
+            }}
+            onClick={() => setActivePanel('control')}
+          >
+            Control Room
+          </button>
+          <button
+            type="button"
+            style={{
+              ...styles.switcherButton,
+              ...(activePanel === 'attendance' ? styles.switcherButtonActive : null),
+            }}
+            onClick={() => setActivePanel('attendance')}
+          >
+            Attendance
+          </button>
+        </div>
+        <AttendanceSystem teacherMode />
+      </div>
+    )
+  }
+
   return (
     <div style={styles.container}>
+      <div style={styles.dashboardSwitcher}>
+        <button
+          type="button"
+          style={{
+            ...styles.switcherButton,
+            ...(activePanel === 'control' ? styles.switcherButtonActive : null),
+          }}
+          onClick={() => setActivePanel('control')}
+        >
+          Control Room
+        </button>
+        <button
+          type="button"
+          style={{
+            ...styles.switcherButton,
+            ...(activePanel === 'attendance' ? styles.switcherButtonActive : null),
+          }}
+          onClick={() => setActivePanel('attendance')}
+        >
+          Attendance Dashboard
+        </button>
+      </div>
+      {activePanel === 'control' && (
+        <div style={styles.attendanceCallout}>
+          <div>
+            <p style={styles.attendanceCalloutTitle}>Teacher attendance dashboard</p>
+            <p style={styles.attendanceCalloutText}>
+              Quickly switch into the attendance view to search, review records, and manually mark students present or absent.
+            </p>
+          </div>
+          <button style={styles.attendanceCalloutButton} onClick={() => setActivePanel('attendance')}>
+            Open Attendance Dashboard
+          </button>
+        </div>
+      )}
       {/* Header */}
       <header style={styles.header}>
         <h1 style={styles.title}>Classroom Control Center</h1>
@@ -759,6 +826,24 @@ const styles = {
     backgroundColor: '#f1f5f9',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
+  dashboardSwitcher: {
+    display: 'flex',
+    gap: '0.75rem',
+    padding: '1rem 1.5rem 0',
+  },
+  switcherButton: {
+    padding: '0.75rem 1rem',
+    borderRadius: '999px',
+    border: '1px solid rgba(148, 163, 184, 0.28)',
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    color: '#334155',
+    fontWeight: 700,
+  },
+  switcherButtonActive: {
+    background: 'linear-gradient(135deg, #0f766e 0%, #0f172a 100%)',
+    color: '#ffffff',
+    border: 'none',
+  },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -802,6 +887,38 @@ const styles = {
     backgroundColor: 'white',
     borderBottom: '1px solid #e2e8f0',
     flexWrap: 'wrap',
+  },
+  attendanceCallout: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '1rem',
+    margin: '1rem 1.5rem',
+    padding: '1rem 1.25rem',
+    backgroundColor: 'white',
+    border: '1px solid #cbd5e1',
+    borderRadius: '1rem',
+  },
+  attendanceCalloutTitle: {
+    margin: 0,
+    fontSize: '1rem',
+    fontWeight: 700,
+    color: '#0f172a',
+  },
+  attendanceCalloutText: {
+    margin: '0.25rem 0 0',
+    fontSize: '0.9rem',
+    color: '#475569',
+    maxWidth: '55rem',
+  },
+  attendanceCalloutButton: {
+    padding: '0.75rem 1rem',
+    borderRadius: '999px',
+    border: 'none',
+    backgroundColor: '#0f766e',
+    color: 'white',
+    fontWeight: 700,
+    cursor: 'pointer',
   },
   controlGroup: {
     display: 'flex',
