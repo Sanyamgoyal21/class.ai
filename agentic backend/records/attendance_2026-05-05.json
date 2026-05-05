@@ -39,47 +39,5 @@
     "date": "2026-05-05",
     "status": "present",
     "markedAt": "2026-05-05T11:50:52.182238Z"
-  },
-  {
-    "id": "30fd3229-f1d6-49d4-92fa-83654bc7b4b2",
-    "studentId": "8bb748ed-6b59-4d4a-96c5-2ce8089488d3",
-    "student": {
-      "name": "Sanyam Goyal",
-      "rollNumber": "R2142231332",
-      "className": "AIML",
-      "section": "B2",
-      "parentMobile": ""
-    },
-    "date": "2026-05-05",
-    "status": "present",
-    "markedAt": "2026-05-05T18:14:57.295816Z"
-  },
-  {
-    "id": "2794ae55-5e12-438e-aa0c-474c1bb9dbc2",
-    "studentId": "53570e14-0f7e-455c-a16a-51f2208b7c4b",
-    "student": {
-      "name": "Prantik Sanko",
-      "rollNumber": "dfwef",
-      "className": "eqwd",
-      "section": "fwdf",
-      "parentMobile": ""
-    },
-    "date": "2026-05-05",
-    "status": "present",
-    "markedAt": "2026-05-05T18:15:27.023409Z"
-  },
-  {
-    "id": "fade5061-993f-40df-bb21-f7f71b61ee9d",
-    "studentId": "374a8a9a-b027-4d37-9b0c-21e1467adb5b",
-    "student": {
-      "name": "Aman Jain",
-      "rollNumber": "R2142230594",
-      "className": "AIML",
-      "section": "B8",
-      "parentMobile": ""
-    },
-    "date": "2026-05-05",
-    "status": "present",
-    "markedAt": "2026-05-05T18:19:38.113824Z"
   }
 ]

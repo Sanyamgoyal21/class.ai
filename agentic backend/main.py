@@ -572,6 +572,7 @@ async def register_student(request: Request):
     class_name    = (body.get("className") or "").strip()
     section       = (body.get("section") or "").strip()
     parent_mobile = (body.get("parentMobile") or "").strip()
+    parent_email  = (body.get("parentEmail") or "").strip()
     images_b64    = body.get("images") or []
 
     if not name:
@@ -625,6 +626,7 @@ async def register_student(request: Request):
         existing["className"]    = class_name
         existing["section"]      = section
         existing["parentMobile"] = parent_mobile
+        existing["parentEmail"]  = parent_email
     else:
         existing = {
             "id": str(uuid.uuid4()),
@@ -633,6 +635,7 @@ async def register_student(request: Request):
             "className": class_name,
             "section": section,
             "parentMobile": parent_mobile,
+            "parentEmail": parent_email,
             "sampleImagePaths": saved_paths,
             "registeredAt": datetime.utcnow().isoformat() + "Z",
         }

@@ -2615,6 +2615,106 @@ app.get("/api/attendance/summary", async (req, res) => {
   });
 });
 
+// Send absence notification emails to parents of absent students
+app.post("/api/attendance/notify-absent", async (req, res) => {
+  const { date, className, section } = req.body || {};
+  if (!date) return res.status(400).json({ error: "date is required" });
+
+  // 1. Fetch records and full student list from Python backend in parallel
+  let records, allStudents;
+  try {
+    const params = { date };
+    if (className) params.className = className;
+    if (section)   params.section   = section;
+    const [recRes, stuRes] = await Promise.all([
+      axios.get(attendanceUrl("/attendance/records"), { params }),
+      axios.get(attendanceUrl("/attendance/students")),
+    ]);
+    records     = recRes.data.records  || [];
+    allStudents = stuRes.data.students || [];
+  } catch (err) {
+    return res.status(502).json({ error: "Failed to fetch attendance records", detail: err.message });
+  }
+
+  // Build a lookup map: studentId → full student doc (has parentEmail)
+  const studentMap = Object.fromEntries(allStudents.map(s => [s.id, s]));
+
+  // 2. Filter absent students, enriching the embedded snapshot with parentEmail from the master record
+  const absentWithEmail = records
+    .filter(r => r.status !== "present")
+    .map(r => {
+      const full = studentMap[r.studentId] || {};
+      return { ...r, student: { ...r.student, parentEmail: full.parentEmail || r.student?.parentEmail || "" } };
+    })
+    .filter(r => r.student.parentEmail);
+
+  if (absentWithEmail.length === 0) {
+    return res.json({ sent: 0, message: "No absent students with a parent email found." });
+  }
+
+  // 3. Send emails via nodemailer
+  const nodemailer = (await import("nodemailer")).default;
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+  try {
+    await transporter.verify();
+  } catch (err) {
+    return res.status(500).json({ error: `SMTP connection failed: ${err.message}. Check EMAIL_USER and EMAIL_PASS in .env` });
+  }
+
+  const results = { sent: 0, failed: [] };
+  for (const record of absentWithEmail) {
+    const { name, className: cls, section: sec, rollNumber } = record.student;
+    const parentEmail = record.student.parentEmail;
+    const mailOptions = {
+      from: `"Class.AI Attendance" <${process.env.EMAIL_USER}>`,
+      to: parentEmail,
+      subject: `Attendance Alert: ${name} was absent on ${date}`,
+      html: `
+        <div style="font-family:sans-serif;max-width:520px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+          <div style="background:#ef4444;padding:24px 28px;">
+            <h2 style="color:#fff;margin:0;font-size:1.3rem;">Attendance Notification</h2>
+          </div>
+          <div style="padding:28px;">
+            <p style="margin:0 0 16px;font-size:1rem;color:#1e293b;">Dear Parent / Guardian,</p>
+            <p style="margin:0 0 16px;color:#334155;">
+              This is to inform you that your ward <strong>${name}</strong>
+              (Roll No: <strong>${rollNumber}</strong>, Class: <strong>${cls}-${sec}</strong>)
+              was marked <strong style="color:#ef4444;">absent</strong> on <strong>${date}</strong>.
+            </p>
+            <p style="margin:0 0 16px;color:#334155;">
+              If this is incorrect or you would like to provide a reason, please contact the school administration.
+            </p>
+            <p style="margin:0;color:#64748b;font-size:0.85rem;">— Class.AI Automated Attendance System</p>
+          </div>
+        </div>
+      `,
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+      results.sent++;
+    } catch (err) {
+      results.failed.push({ name, parentEmail, error: err.message });
+    }
+  }
+
+  return res.json({
+    sent: results.sent,
+    failed: results.failed,
+    total_absent: absentWithEmail.length,
+    message: `Emails sent to ${results.sent} of ${absentWithEmail.length} parent(s).`,
+  });
+});
+
 app.get("/api/doubt/stream", async (req, res) => {
   const question = req.query.q;
   const feynmanMode = true;

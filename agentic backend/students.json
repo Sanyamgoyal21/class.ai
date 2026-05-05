@@ -1,125 +1,28 @@
 {
   "students": [
     {
-      "id": "8bb748ed-6b59-4d4a-96c5-2ce8089488d3",
-      "name": "Sanyam Goyal",
-      "rollNumber": "R2142231332",
-      "className": "AIML",
-      "section": "B2",
-      "sampleImagePaths": [
-        "Attendance by ArcFace\\dataset\\Sanyam Goyal.jpg",
-        "Attendance by ArcFace\\dataset\\Sanyam Goyal_2.jpg",
-        "Attendance by ArcFace\\dataset\\Sanyam Goyal_3.jpg",
-        "Attendance by ArcFace\\dataset\\Sanyam Goyal_4.jpg",
-        "Attendance by ArcFace\\dataset\\Sanyam Goyal_5.jpg",
-        "Attendance by ArcFace\\dataset\\Sanyam Goyal_6.jpg",
-        "Attendance by ArcFace\\dataset\\Sanyam Goyal_7.jpg",
-        "Attendance by ArcFace\\dataset\\Sanyam Goyal_8.jpg",
-        "Attendance by ArcFace\\dataset\\Sanyam Goyal_9.jpg",
-        "Attendance by ArcFace\\dataset\\Sanyam Goyal_10.jpg"
-      ],
-      "registeredAt": "2026-05-04T11:09:33.681116Z"
-    },
-    {
-      "id": "53570e14-0f7e-455c-a16a-51f2208b7c4b",
-      "name": "Prantik Sanko",
-      "rollNumber": "dfwef",
-      "className": "eqwd",
-      "section": "fwdf",
-      "sampleImagePaths": [
-        "Attendance by ArcFace\\dataset\\Prantik Sanko.jpg",
-        "Attendance by ArcFace\\dataset\\Prantik Sanko_2.jpg",
-        "Attendance by ArcFace\\dataset\\Prantik Sanko_3.jpg",
-        "Attendance by ArcFace\\dataset\\Prantik Sanko_4.jpg",
-        "Attendance by ArcFace\\dataset\\Prantik Sanko_5.jpg"
-      ],
-      "registeredAt": "2026-05-04T11:17:12.226703Z"
-    },
-    {
-      "id": "d2aad829-e692-4082-86f4-5f485b93a50c",
-      "name": "omo",
-      "rollNumber": "kmklmlk",
-      "className": "nkjnkj",
-      "section": "knmkjn",
-      "sampleImagePaths": [
-        "Attendance by ArcFace\\dataset\\omo.jpg",
-        "Attendance by ArcFace\\dataset\\omo_2.jpg",
-        "Attendance by ArcFace\\dataset\\omo_3.jpg",
-        "Attendance by ArcFace\\dataset\\omo_4.jpg",
-        "Attendance by ArcFace\\dataset\\omo_5.jpg"
-      ],
-      "registeredAt": "2026-05-04T11:23:59.068524Z"
-    },
-    {
-      "id": "fc94b7b5-f394-4021-ae49-50b7ea4f67ab",
-      "name": "xnZIni",
-      "rollNumber": "njkndj",
-      "className": "njdj",
-      "section": "jndskjn",
-      "sampleImagePaths": [
-        "Attendance by ArcFace\\dataset\\xnZIni.jpg",
-        "Attendance by ArcFace\\dataset\\xnZIni_2.jpg",
-        "Attendance by ArcFace\\dataset\\xnZIni_3.jpg",
-        "Attendance by ArcFace\\dataset\\xnZIni_4.jpg",
-        "Attendance by ArcFace\\dataset\\xnZIni_5.jpg",
-        "Attendance by ArcFace\\dataset\\xnZIni_6.jpg",
-        "Attendance by ArcFace\\dataset\\xnZIni_7.jpg",
-        "Attendance by ArcFace\\dataset\\xnZIni_8.jpg",
-        "Attendance by ArcFace\\dataset\\xnZIni_9.jpg"
-      ],
-      "registeredAt": "2026-05-04T11:28:15.486646Z"
-    },
-    {
-      "id": "f6662fa7-272c-41d1-8799-a716b7bcc673",
-      "name": "PrantiK Sanki",
+      "id": "7067b176-c566-4b52-bf12-5252c492dca2",
+      "name": "Prantik Sanki",
       "rollNumber": "R2142231381",
-      "className": "10",
-      "section": "A",
+      "className": "B.Tech CSE",
+      "section": "AI ML",
+      "parentMobile": "9339669870",
+      "parentEmail": "prantiksanki@gmail.com",
       "sampleImagePaths": [
-        "Attendance by ArcFace\\dataset\\PrantiK Sanki.jpg",
-        "Attendance by ArcFace\\dataset\\PrantiK Sanki_2.jpg",
-        "Attendance by ArcFace\\dataset\\PrantiK Sanki_3.jpg",
-        "Attendance by ArcFace\\dataset\\PrantiK Sanki_4.jpg",
-        "Attendance by ArcFace\\dataset\\PrantiK Sanki_5.jpg",
-        "Attendance by ArcFace\\dataset\\PrantiK Sanki_6.jpg",
-        "Attendance by ArcFace\\dataset\\PrantiK Sanki_7.jpg",
-        "Attendance by ArcFace\\dataset\\PrantiK Sanki_8.jpg",
-        "Attendance by ArcFace\\dataset\\PrantiK Sanki_9.jpg",
-        "Attendance by ArcFace\\dataset\\PrantiK Sanki_10.jpg"
+        "Attendance by ArcFace\\dataset\\Prantik Sanki.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_2.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_3.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_4.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_5.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_6.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_7.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_8.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_9.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_10.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_11.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_12.jpg"
       ],
-      "registeredAt": "2026-05-05T06:24:34.339886Z"
-    },
-    {
-      "id": "1bebc0c5-9b55-4cdd-821e-8cf40b823dbb",
-      "name": "Santosh Panda Sir",
-      "rollNumber": "R214223`1",
-      "className": "AIML",
-      "section": "T",
-      "parentMobile": "",
-      "sampleImagePaths": [
-        "Attendance by ArcFace\\dataset\\Santosh Panda Sir.jpg",
-        "Attendance by ArcFace\\dataset\\Santosh Panda Sir_2.jpg",
-        "Attendance by ArcFace\\dataset\\Santosh Panda Sir_3.jpg",
-        "Attendance by ArcFace\\dataset\\Santosh Panda Sir_4.jpg",
-        "Attendance by ArcFace\\dataset\\Santosh Panda Sir_5.jpg"
-      ],
-      "registeredAt": "2026-05-05T11:49:44.843209Z"
-    },
-    {
-      "id": "374a8a9a-b027-4d37-9b0c-21e1467adb5b",
-      "name": "Aman Jain",
-      "rollNumber": "R2142230594",
-      "className": "AIML",
-      "section": "B8",
-      "parentMobile": "",
-      "sampleImagePaths": [
-        "Attendance by ArcFace\\dataset\\Aman Jain.jpg",
-        "Attendance by ArcFace\\dataset\\Aman Jain_2.jpg",
-        "Attendance by ArcFace\\dataset\\Aman Jain_3.jpg",
-        "Attendance by ArcFace\\dataset\\Aman Jain_4.jpg",
-        "Attendance by ArcFace\\dataset\\Aman Jain_5.jpg"
-      ],
-      "registeredAt": "2026-05-05T18:18:29.361335Z"
+      "registeredAt": "2026-05-05T17:38:40.360978Z"
     }
   ]
 }

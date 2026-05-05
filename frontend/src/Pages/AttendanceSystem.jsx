@@ -1,5 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { ATTENDANCE_API_URL } from '../utils/backendUrl'
+import { ATTENDANCE_API_URL as _BASE, BACKEND_URL } from '../utils/backendUrl'
+
+// Attendance API must always reach the local Python service directly.
+const ATTENDANCE_API_URL = _BASE.includes('localhost') || _BASE.includes('127.0.0.1')
+  ? _BASE
+  : 'http://localhost:8000/attendance'
 
 const today = () => {
   const d = new Date()
@@ -59,7 +64,7 @@ function RegisterPanel() {
   const detectRef = useRef(null)
   const busyRef   = useRef(false)
 
-  const [form, setForm] = useState({ name: '', rollNumber: '', className: '', section: '', parentMobile: '' })
+  const [form, setForm] = useState({ name: '', rollNumber: '', className: '', section: '', parentMobile: '', parentEmail: '' })
   const [samples, setSamples] = useState([])
   const [camState, setCamState] = useState('idle')
   const [camError, setCamError] = useState('')
@@ -144,7 +149,7 @@ function RegisterPanel() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setMsg(null)
-    const { name, rollNumber, className, section, parentMobile } = form
+    const { name, rollNumber, className, section, parentMobile, parentEmail } = form
     if (!name.trim() || !rollNumber.trim() || !className.trim() || !section.trim()) {
       return setMsg({ type: 'err', text: 'Name, roll number, class, and section are required.' })
     }
@@ -156,12 +161,12 @@ function RegisterPanel() {
       const res = await fetch(`${ATTENDANCE_API_URL}/students/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), rollNumber: rollNumber.trim(), className: className.trim(), section: section.trim(), parentMobile: parentMobile.trim(), images: samples }),
+        body: JSON.stringify({ name: name.trim(), rollNumber: rollNumber.trim(), className: className.trim(), section: section.trim(), parentMobile: parentMobile.trim(), parentEmail: parentEmail.trim(), images: samples }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Registration failed')
       setMsg({ type: 'ok', text: `✅ ${data.student.name} registered successfully with ${samples.length} face samples. Saved to MongoDB.` })
-      setForm({ name: '', rollNumber: '', className: '', section: '', parentMobile: '' })
+      setForm({ name: '', rollNumber: '', className: '', section: '', parentMobile: '', parentEmail: '' })
       setSamples([])
       stopCam()
     } catch (err) {
@@ -188,6 +193,7 @@ function RegisterPanel() {
               <Field label="Section *" value={form.section} onChange={v => setForm(p => ({ ...p, section: v }))} placeholder="A" />
             </div>
             <Field label="Parent Mobile" value={form.parentMobile} onChange={v => setForm(p => ({ ...p, parentMobile: v }))} placeholder="9876543210" type="tel" />
+            <Field label="Parent Email" value={form.parentEmail} onChange={v => setForm(p => ({ ...p, parentEmail: v }))} placeholder="parent@example.com" type="email" />
 
             {msg && (
               <div style={{ ...R.msg, background: msg.type === 'ok' ? '#f0fdf4' : '#fff1f2', color: msg.type === 'ok' ? '#15803d' : '#be123c', borderColor: msg.type === 'ok' ? '#86efac' : '#fecdd3' }}>
@@ -258,7 +264,7 @@ function RegisterPanel() {
           <h3 style={R.infoTitle}>How registration works</h3>
           <ol style={R.steps}>
             {[
-              'Fill in the student\'s name, roll number, class, section, and parent mobile.',
+              'Fill in the student\'s name, roll number, class, section, parent mobile, and parent email.',
               'Open the camera and position the student\'s face in the frame.',
               'Capture 5 face samples from different angles for best accuracy.',
               'Click "Register Student" — face encodings and student info are saved to MongoDB.',
@@ -334,6 +340,38 @@ function RecordsPanel() {
   const present = records.filter(r => r.status === 'present').length
   const absent  = records.filter(r => r.status !== 'present').length
 
+  const [mailing, setMailing] = useState(false)
+  const [mailMsg, setMailMsg] = useState(null)
+
+  const sendAbsenceEmails = async () => {
+    setMailing(true)
+    setMailMsg(null)
+    try {
+      const body = { date: filters.date }
+      if (filters.className) body.className = filters.className
+      if (filters.section)   body.section   = filters.section
+      const notifyUrl = BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1')
+        ? BACKEND_URL
+        : 'http://localhost:5000'
+      const res = await fetch(`${notifyUrl}/api/attendance/notify-absent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to send emails')
+      const failDetail = data.failed?.length
+        ? ` | Failed: ${data.failed.map(f => f.error).join('; ')}`
+        : ''
+      setMailMsg({ type: data.sent > 0 ? 'ok' : 'err', text: data.message + failDetail })
+    } catch (err) {
+      setMailMsg({ type: 'err', text: err.message })
+    } finally {
+      setMailing(false)
+      setTimeout(() => setMailMsg(null), 6000)
+    }
+  }
+
   return (
     <div style={REC.wrap}>
       <div style={REC.stats}>
@@ -357,8 +395,32 @@ function RecordsPanel() {
           <input type="text" placeholder="A" value={filters.section} onChange={e => setFilters(p => ({ ...p, section: e.target.value }))} style={REC.input} />
         </label>
         <button onClick={load} style={REC.applyBtn}>Apply</button>
+        <button
+          onClick={sendAbsenceEmails}
+          disabled={mailing || absent === 0}
+          style={{
+            ...REC.applyBtn,
+            background: mailing ? '#94a3b8' : '#ef4444',
+            color: '#fff',
+            opacity: absent === 0 ? 0.45 : 1,
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+          }}
+          title={absent === 0 ? 'No absent students' : `Notify parents of ${absent} absent student(s)`}
+        >
+          {mailing ? 'Sending…' : `✉ Send Mail to Parents${absent > 0 ? ` (${absent})` : ''}`}
+        </button>
       </div>
 
+      {mailMsg && (
+        <div style={{
+          padding: '0.75rem 1rem', borderRadius: 10, fontSize: '0.88rem', fontWeight: 600,
+          background: mailMsg.type === 'ok' ? '#f0fdf4' : '#fff1f2',
+          color:      mailMsg.type === 'ok' ? '#15803d' : '#be123c',
+          border:    `1px solid ${mailMsg.type === 'ok' ? '#86efac' : '#fecdd3'}`,
+        }}>
+          {mailMsg.text}
+        </div>
+      )}
       {msg && <div style={REC.toast}>{msg}</div>}
       {fetchError && (
         <div style={{ padding: '0.75rem 1rem', borderRadius: 10, background: '#fff1f2', color: '#be123c', fontWeight: 600, fontSize: '0.88rem', border: '1px solid #fecdd3' }}>
