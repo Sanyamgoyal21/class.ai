@@ -1,0 +1,29 @@
+[
+  {
+    "id": "0269d4f8-6a33-4bde-b1e0-795db4f2f314",
+    "studentId": "f6662fa7-272c-41d1-8799-a716b7bcc673",
+    "student": {
+      "name": "PrantiK Sanki",
+      "rollNumber": "R2142231381",
+      "className": "10",
+      "section": "A"
+    },
+    "date": "2026-05-05",
+    "status": "present",
+    "markedAt": "2026-05-05T07:42:28.796300Z"
+  },
+  {
+    "id": "61a4cc07-aeb1-4d47-a260-5f961d17f7f5",
+    "studentId": "f6662fa7-272c-41d1-8799-a716b7bcc673",
+    "student": {
+      "name": "PrantiK Sanki",
+      "rollNumber": "R2142231381",
+      "className": "10",
+      "section": "A",
+      "parentMobile": ""
+    },
+    "date": "2026-05-05",
+    "status": "present",
+    "markedAt": "2026-05-05T07:39:04.706804Z"
+  }
+]

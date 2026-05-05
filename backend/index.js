@@ -74,7 +74,7 @@ async function ensureAttendanceServiceRunning() {
 
   const child = spawn(python, [AGENTIC_BACKEND_SCRIPT, "--mode", "api", "--host", "127.0.0.1", "--port", "8000"], {
     cwd: AGENTIC_BACKEND_ROOT,
-    env: { ...process.env, PYTHONUNBUFFERED: "1" },
+    env: { ...process.env, PYTHONUNBUFFERED: "1", PYTHONIOENCODING: "utf-8" },
     stdio: ["ignore", "pipe", "pipe"],
   });
 
@@ -2458,6 +2458,15 @@ app.post("/api/attendance/detect-face", async (req, res) => {
   });
 });
 
+app.post("/api/attendance/recognize", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "post",
+    url: attendanceUrl("/attendance/recognize"),
+    headers: { "Content-Type": "application/json" },
+    data: req.body,
+  });
+});
+
 app.post("/api/attendance/students/register", async (req, res) => {
   console.log("[attendance-proxy] register student route", {
     bodySize: req.body ? JSON.stringify(req.body).length : 0,
@@ -2533,6 +2542,23 @@ app.patch("/api/attendance/records/:recordId", async (req, res) => {
     method: "patch",
     url: attendanceUrl(`/attendance/records/${req.params.recordId}`),
     data: req.body,
+  });
+});
+
+// Student attendance history (all dates for one student)
+app.get("/api/attendance/students/:studentId/history", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "get",
+    url: attendanceUrl(`/attendance/students/${req.params.studentId}/history`),
+    params: req.query,
+  });
+});
+
+// Date-level summary (how many present per day)
+app.get("/api/attendance/summary", async (req, res) => {
+  return proxyAttendanceRequest(res, {
+    method: "get",
+    url: attendanceUrl("/attendance/summary"),
   });
 });
 

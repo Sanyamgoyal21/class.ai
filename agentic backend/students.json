@@ -63,6 +63,26 @@
         "C:\\Users\\sanya\\OneDrive - UPES\\Desktop\\University Documents\\Semester-6 AIML B-2\\Minor Project\\Project\\agentic backend\\Attendance by ArcFace\\dataset\\xnZIni_9.jpg"
       ],
       "registeredAt": "2026-05-04T11:28:15.486646Z"
+    },
+    {
+      "id": "f6662fa7-272c-41d1-8799-a716b7bcc673",
+      "name": "PrantiK Sanki",
+      "rollNumber": "R2142231381",
+      "className": "10",
+      "section": "A",
+      "sampleImagePaths": [
+        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki.jpg",
+        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_2.jpg",
+        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_3.jpg",
+        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_4.jpg",
+        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_5.jpg",
+        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_6.jpg",
+        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_7.jpg",
+        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_8.jpg",
+        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_9.jpg",
+        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_10.jpg"
+      ],
+      "registeredAt": "2026-05-05T06:24:34.339886Z"
     }
   ]
 }

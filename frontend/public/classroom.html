@@ -446,7 +446,7 @@
   <script>
     // =================== CONFIGURATION ===================
 
-    const DEAD_REMOTE_HOSTS = new Set(['class-ai-backend.onrender.com']);
+    const DEAD_REMOTE_HOSTS = new Set([]);
 
     function normalizeUrl(value) {
       if (!value || typeof value !== 'string') return null;
@@ -492,6 +492,7 @@
     }
 
     const SUPERNODE_URL = resolveBackendUrl();
+    const urlParams = new URLSearchParams(window.location.search);
 
     // Local Ollama configuration (runs on the classroom device)
     const OLLAMA_URL = window.OLLAMA_URL || 'http://localhost:11434';

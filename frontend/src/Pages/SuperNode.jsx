@@ -2,20 +2,22 @@ import { useState, useEffect, useRef } from 'react'
 import { io } from 'socket.io-client'
 import { BACKEND_URL } from '../utils/backendUrl'
 import AttendanceSystem from './AttendanceSystem.jsx'
+import CameraMonitor from './CameraMonitor.jsx'
 
 const SUPERNODE_URL = BACKEND_URL
 
 const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+.-]*:/
 const BARE_DOMAIN_PATTERN = /^(?:www\.|[\w-]+(?:\.[\w-]+)+)/
 
-// Load saved presets from localStorage
 const loadSavedPresets = () => {
   try {
     const saved = localStorage.getItem('videoPresets')
-    return saved ? JSON.parse(saved) : [
-      { id: 1, name: 'Morning Assembly', url: 'https://www.youtube.com/watch?v=example1' },
-      { id: 2, name: 'National Anthem', url: 'https://www.youtube.com/watch?v=example2' },
-    ]
+    return saved
+      ? JSON.parse(saved)
+      : [
+          { id: 1, name: 'Morning Assembly', url: 'https://www.youtube.com/watch?v=example1' },
+          { id: 2, name: 'National Anthem', url: 'https://www.youtube.com/watch?v=example2' },
+        ]
   } catch {
     return []
   }
@@ -25,17 +27,9 @@ const normalizeVideoUrl = (value) => {
   const trimmed = value.trim()
   if (!trimmed) return null
 
-  if (URL_SCHEME_PATTERN.test(trimmed)) {
-    return trimmed
-  }
-
-  if (trimmed.startsWith('//')) {
-    return `https:${trimmed}`
-  }
-
-  if (BARE_DOMAIN_PATTERN.test(trimmed)) {
-    return `https://${trimmed}`
-  }
+  if (URL_SCHEME_PATTERN.test(trimmed)) return trimmed
+  if (trimmed.startsWith('//')) return `https:${trimmed}`
+  if (BARE_DOMAIN_PATTERN.test(trimmed)) return `https://${trimmed}`
 
   return null
 }
@@ -53,42 +47,35 @@ const getPlayableVideoUrl = (value) => {
 }
 
 function SuperNode() {
-  // Connection state
   const [devices, setDevices] = useState([])
   const [connected, setConnected] = useState(false)
   const [socket, setSocket] = useState(null)
   const [messages, setMessages] = useState([])
   const [health, setHealth] = useState(null)
 
-  // Video control state
   const [selectedDevices, setSelectedDevices] = useState([])
   const [globalVideoUrl, setGlobalVideoUrl] = useState('')
   const [deviceVideoUrls, setDeviceVideoUrls] = useState({})
   const [videoStates, setVideoStates] = useState({})
 
-  // Saved presets
   const [savedPresets, setSavedPresets] = useState(loadSavedPresets)
   const [newPresetName, setNewPresetName] = useState('')
   const [showPresetModal, setShowPresetModal] = useState(false)
 
-  // Announcement (WebRTC) state
   const [isAnnouncing, setIsAnnouncing] = useState(false)
   const [announcementSession, setAnnouncementSession] = useState(null)
   const [localStream, setLocalStream] = useState(null)
   const localVideoRef = useRef(null)
   const peerConnectionsRef = useRef({})
 
-  // Emergency broadcast state
   const [emergencyMessage, setEmergencyMessage] = useState('')
   const [showEmergencyModal, setShowEmergencyModal] = useState(false)
-  const [activePanel, setActivePanel] = useState('control')
+  const [activePanel, setActivePanel] = useState('dashboard')
 
-  // Save presets to localStorage when changed
   useEffect(() => {
     localStorage.setItem('videoPresets', JSON.stringify(savedPresets))
   }, [savedPresets])
 
-  // Initialize socket connection
   useEffect(() => {
     const s = io(SUPERNODE_URL, {
       reconnection: true,
@@ -121,24 +108,25 @@ function SuperNode() {
     })
 
     s.on('devices:list', (deviceList) => {
-      setDevices(deviceList.filter(d => d.type !== 'dashboard'))
+      setDevices(deviceList.filter((device) => device.type !== 'dashboard'))
     })
 
     s.on('device:status', (data) => {
-      setDevices(prev => prev.map(d =>
-        d.deviceId === data.deviceId ? { ...d, status: data.status } : d
-      ))
+      setDevices((prev) =>
+        prev.map((device) => (device.deviceId === data.deviceId ? { ...device, status: data.status } : device))
+      )
     })
 
     s.on('device:heartbeat-ack', (data) => {
-      setDevices(prev => prev.map(d =>
-        d.deviceId === data.deviceId ? { ...d, status: data.status, metrics: data.metrics } : d
-      ))
+      setDevices((prev) =>
+        prev.map((device) =>
+          device.deviceId === data.deviceId ? { ...device, status: data.status, metrics: data.metrics } : device
+        )
+      )
     })
 
-    // Video events
     s.on('video:state-changed', (data) => {
-      setVideoStates(prev => ({
+      setVideoStates((prev) => ({
         ...prev,
         [data.deviceId]: {
           state: data.state,
@@ -167,7 +155,6 @@ function SuperNode() {
       addMessage(data.error || 'Video command failed', 'error')
     })
 
-    // Announcement events
     s.on('announcement:started', (data) => {
       setAnnouncementSession(data)
       addMessage(`Announcement started - ${data.targetCount} device(s)`, 'success')
@@ -183,7 +170,6 @@ function SuperNode() {
       addMessage(`${data.deviceName} ready`, 'info')
     })
 
-    // WebRTC signaling
     s.on('webrtc:answer', async (data) => {
       const pc = peerConnectionsRef.current[data.from]
       if (pc) {
@@ -212,7 +198,7 @@ function SuperNode() {
   }, [])
 
   const addMessage = (text, type = 'info') => {
-    setMessages(prev => [{ text, type, timestamp: new Date().toLocaleTimeString() }, ...prev].slice(0, 30))
+    setMessages((prev) => [{ text, type, timestamp: new Date().toLocaleTimeString() }, ...prev].slice(0, 30))
   }
 
   const fetchHealth = async () => {
@@ -224,24 +210,21 @@ function SuperNode() {
     }
   }
 
-  // =================== DEVICE SELECTION ===================
-
   const toggleDeviceSelection = (deviceId) => {
-    setSelectedDevices(prev =>
-      prev.includes(deviceId) ? prev.filter(id => id !== deviceId) : [...prev, deviceId]
+    setSelectedDevices((prev) =>
+      prev.includes(deviceId) ? prev.filter((id) => id !== deviceId) : [...prev, deviceId]
     )
   }
 
   const selectAllClassrooms = () => {
-    const ids = devices.filter(d => d.type === 'classroom' && d.status === 'online').map(d => d.deviceId)
+    const ids = devices
+      .filter((device) => device.type === 'classroom' && device.status === 'online')
+      .map((device) => device.deviceId)
     setSelectedDevices(ids)
   }
 
   const deselectAll = () => setSelectedDevices([])
 
-  // =================== VIDEO CONTROL ===================
-
-  // Play to selected devices (global)
   const playToSelected = () => {
     const playableUrl = getPlayableVideoUrl(globalVideoUrl)
 
@@ -261,7 +244,6 @@ function SuperNode() {
     }
   }
 
-  // Play to single device
   const playToDevice = (deviceId) => {
     const url = getPlayableVideoUrl(deviceVideoUrls[deviceId] || '')
 
@@ -271,13 +253,13 @@ function SuperNode() {
     }
 
     if (socket && connected) {
-      setDeviceVideoUrls(prev => ({
+      setDeviceVideoUrls((prev) => ({
         ...prev,
         [deviceId]: url,
       }))
       socket.emit('video:play', {
         targetDeviceIds: [deviceId],
-        url: url,
+        url,
         autoPlay: true,
         volume: 1.0,
       })
@@ -285,21 +267,17 @@ function SuperNode() {
     }
   }
 
-  // Stop single device
   const stopDevice = (deviceId) => {
     if (socket && connected) {
       socket.emit('video:stop', { targetDeviceIds: [deviceId] })
     }
   }
 
-  // Stop all selected
   const stopAllSelected = () => {
     if (socket && connected && selectedDevices.length > 0) {
       socket.emit('video:stop', { targetDeviceIds: selectedDevices })
     }
   }
-
-  // =================== PRESETS ===================
 
   const saveCurrentAsPreset = () => {
     const playableUrl = getPlayableVideoUrl(globalVideoUrl)
@@ -315,7 +293,7 @@ function SuperNode() {
         name: newPresetName.trim(),
         url: playableUrl,
       }
-      setSavedPresets(prev => [...prev, newPreset])
+      setSavedPresets((prev) => [...prev, newPreset])
       setGlobalVideoUrl(playableUrl)
       setNewPresetName('')
       setShowPresetModal(false)
@@ -328,10 +306,8 @@ function SuperNode() {
   }
 
   const deletePreset = (id) => {
-    setSavedPresets(prev => prev.filter(p => p.id !== id))
+    setSavedPresets((prev) => prev.filter((preset) => preset.id !== id))
   }
-
-  // =================== ANNOUNCEMENT ===================
 
   const startAnnouncement = async () => {
     if (selectedDevices.length === 0) {
@@ -354,9 +330,8 @@ function SuperNode() {
       })
 
       setTimeout(() => {
-        selectedDevices.forEach(deviceId => createOfferForDevice(deviceId, stream))
+        selectedDevices.forEach((deviceId) => createOfferForDevice(deviceId, stream))
       }, 500)
-
     } catch (error) {
       addMessage(`Camera/mic denied: ${error.message}`, 'error')
       setIsAnnouncing(false)
@@ -372,7 +347,7 @@ function SuperNode() {
     })
     peerConnectionsRef.current[deviceId] = pc
 
-    stream.getTracks().forEach(track => pc.addTrack(track, stream))
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream))
 
     pc.onicecandidate = (event) => {
       if (event.candidate && socket) {
@@ -401,10 +376,10 @@ function SuperNode() {
 
   const cleanupWebRTC = () => {
     if (localStream) {
-      localStream.getTracks().forEach(track => track.stop())
+      localStream.getTracks().forEach((track) => track.stop())
       setLocalStream(null)
     }
-    Object.values(peerConnectionsRef.current).forEach(pc => pc?.close())
+    Object.values(peerConnectionsRef.current).forEach((pc) => pc?.close())
     peerConnectionsRef.current = {}
     setIsAnnouncing(false)
     setAnnouncementSession(null)
@@ -413,12 +388,9 @@ function SuperNode() {
 
   useEffect(() => () => cleanupWebRTC(), [])
 
-  // =================== EMERGENCY BROADCAST ===================
-
   const sendEmergencyBroadcast = () => {
     if (socket && connected && emergencyMessage.trim()) {
-      // Send to ALL classroom devices (not just selected)
-      const allClassrooms = devices.filter(d => d.type === 'classroom').map(d => d.deviceId)
+      const allClassrooms = devices.filter((device) => device.type === 'classroom').map((device) => device.deviceId)
 
       socket.emit('emergency:broadcast', {
         message: emergencyMessage.trim(),
@@ -431,386 +403,351 @@ function SuperNode() {
     }
   }
 
-  // =================== RENDER ===================
+  const classroomDevices = devices.filter((device) => device.type === 'classroom')
+  const onlineCount = classroomDevices.filter((device) => device.status === 'online').length
+  const playingCount = Object.values(videoStates).filter((state) => state?.state === 'playing').length
+  const recentMessages = messages.slice(0, 8)
+  const selectedClassroomNames = classroomDevices
+    .filter((device) => selectedDevices.includes(device.deviceId))
+    .map((device) => device.name || device.deviceId)
 
-  const classroomDevices = devices.filter(d => d.type === 'classroom')
-  const onlineCount = classroomDevices.filter(d => d.status === 'online').length
-
-  if (activePanel === 'attendance') {
-    return (
-      <div style={styles.container}>
-        <div style={styles.dashboardSwitcher}>
-          <button
-            type="button"
-            style={{
-              ...styles.switcherButton,
-              ...(activePanel === 'control' ? styles.switcherButtonActive : null),
-            }}
-            onClick={() => setActivePanel('control')}
-          >
-            Control Room
-          </button>
-          <button
-            type="button"
-            style={{
-              ...styles.switcherButton,
-              ...(activePanel === 'attendance' ? styles.switcherButtonActive : null),
-            }}
-            onClick={() => setActivePanel('attendance')}
-          >
-            Attendance
-          </button>
-        </div>
-        <AttendanceSystem teacherMode />
-      </div>
-    )
-  }
+  const sidebarSections = [
+    { id: 'dashboard', label: 'Dashboard', badge: `${onlineCount}`, iconTone: styles.navIconDark, icon: 'D' },
+    { id: 'attendance', label: 'Attendance / Student record', badge: null, iconTone: styles.navIconBlue, icon: 'A' },
+    { id: 'monitor', label: 'Monitor', badge: `${classroomDevices.length}`, iconTone: styles.navIconGreen, icon: 'M' },
+  ]
 
   return (
     <div style={styles.container}>
-      <div style={styles.dashboardSwitcher}>
-        <button
-          type="button"
-          style={{
-            ...styles.switcherButton,
-            ...(activePanel === 'control' ? styles.switcherButtonActive : null),
-          }}
-          onClick={() => setActivePanel('control')}
-        >
-          Control Room
-        </button>
-        <button
-          type="button"
-          style={{
-            ...styles.switcherButton,
-            ...(activePanel === 'attendance' ? styles.switcherButtonActive : null),
-          }}
-          onClick={() => setActivePanel('attendance')}
-        >
-          Attendance Dashboard
-        </button>
-      </div>
-      {activePanel === 'control' && (
-        <div style={styles.attendanceCallout}>
-          <div>
-            <p style={styles.attendanceCalloutTitle}>Teacher attendance dashboard</p>
-            <p style={styles.attendanceCalloutText}>
-              Quickly switch into the attendance view to search, review records, and manually mark students present or absent.
-            </p>
+      <div style={styles.layout}>
+        <aside style={styles.sidebar}>
+          <div style={styles.sidebarBrand}>
+            <div style={styles.sidebarLogo}>S</div>
+            <div>
+              <div style={styles.sidebarTitle}>Setu</div>
+              <div style={styles.sidebarSub}>Supernode</div>
+            </div>
           </div>
-          <button style={styles.attendanceCalloutButton} onClick={() => setActivePanel('attendance')}>
-            Open Attendance Dashboard
-          </button>
-        </div>
-      )}
-      {/* Header */}
-      <header style={styles.header}>
-        <h1 style={styles.title}>Classroom Control Center</h1>
-        <div style={styles.headerRight}>
-          <span style={styles.deviceCount}>{onlineCount} / {classroomDevices.length} online</span>
-          <div style={styles.connectionStatus}>
-            <span style={{ ...styles.statusDot, backgroundColor: connected ? '#22c55e' : '#ef4444' }} />
-            {connected ? 'Connected' : 'Disconnected'}
-          </div>
-        </div>
-      </header>
 
-      {/* Control Bar - Always Visible */}
-      <div style={styles.controlBar}>
-        {/* Selection Controls */}
-        <div style={styles.controlGroup}>
-          <button style={styles.selectBtn} onClick={selectAllClassrooms}>
-            Select All ({onlineCount})
-          </button>
-          <button style={styles.selectBtn} onClick={deselectAll}>
-            Deselect
-          </button>
-          <span style={styles.selectedCount}>{selectedDevices.length} selected</span>
-        </div>
-
-        {/* Global Video Controls */}
-        <div style={styles.controlGroup}>
-          <select
-            style={styles.presetSelect}
-            onChange={(e) => {
-              const preset = savedPresets.find(p => p.id === parseInt(e.target.value))
-              if (preset) loadPreset(preset)
-            }}
-            value=""
-          >
-            <option value="">Load Preset...</option>
-            {savedPresets.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <input
-            type="text"
-            placeholder="Paste full YouTube or video URL..."
-            value={globalVideoUrl}
-            onChange={(e) => setGlobalVideoUrl(e.target.value)}
-            style={styles.urlInput}
-          />
-          <button
-            style={{ ...styles.actionBtn, ...styles.playBtn }}
-            onClick={playToSelected}
-            disabled={!globalVideoUrl.trim() || selectedDevices.length === 0}
-          >
-            Play to Selected
-          </button>
-          <button
-            style={{ ...styles.actionBtn, ...styles.stopBtn }}
-            onClick={stopAllSelected}
-            disabled={selectedDevices.length === 0}
-          >
-            Stop All
-          </button>
-          <button style={styles.savePresetBtn} onClick={() => setShowPresetModal(true)}>
-            Save
-          </button>
-        </div>
-
-        {/* Announcement */}
-        <div style={styles.controlGroup}>
-          {!isAnnouncing ? (
-            <button
-              style={{ ...styles.actionBtn, ...styles.announceBtn }}
-              onClick={startAnnouncement}
-              disabled={selectedDevices.length === 0}
-            >
-              Start Live
-            </button>
-          ) : (
-            <button
-              style={{ ...styles.actionBtn, ...styles.stopBtn }}
-              onClick={endAnnouncement}
-            >
-              End Live
-            </button>
-          )}
-        </div>
-
-        {/* Emergency */}
-        <button
-          style={styles.emergencyBtn}
-          onClick={() => setShowEmergencyModal(true)}
-        >
-          EMERGENCY
-        </button>
-      </div>
-
-      {/* Main Content */}
-      <div style={styles.mainContent}>
-        {/* Left Panel - Devices */}
-        <div style={styles.panel}>
-          <h2 style={styles.panelTitle}>Classrooms</h2>
-          <div style={styles.deviceList}>
-            {classroomDevices.length === 0 ? (
-              <p style={styles.noDevices}>No classrooms connected</p>
-            ) : (
-              classroomDevices.map(device => (
-                <div
-                  key={device.deviceId}
+          <div style={styles.sidebarMenu}>
+            {sidebarSections.map((section) => {
+              const active = activePanel === section.id
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setActivePanel(section.id)}
                   style={{
-                    ...styles.deviceCard,
-                    borderColor: selectedDevices.includes(device.deviceId) ? '#8b5cf6' : '#e5e7eb',
-                    backgroundColor: selectedDevices.includes(device.deviceId) ? '#faf5ff' : 'white',
-                    opacity: device.status === 'online' ? 1 : 0.5,
+                    ...styles.sidebarItem,
+                    ...(active ? styles.sidebarItemActive : null),
                   }}
                 >
-                  {/* Device Header */}
-                  <div style={styles.deviceHeader}>
-                    <input
-                      type="checkbox"
-                      checked={selectedDevices.includes(device.deviceId)}
-                      onChange={() => toggleDeviceSelection(device.deviceId)}
-                      disabled={device.status !== 'online'}
-                      style={styles.checkbox}
-                    />
-                    <span style={styles.deviceName}>{device.name || device.deviceId}</span>
-                    <span style={{
-                      ...styles.statusBadge,
-                      backgroundColor: device.status === 'online' ? '#22c55e' : '#ef4444'
-                    }}>
-                      {device.status}
-                    </span>
-                  </div>
-
-                  {/* Per-Device Video Control */}
-                  {device.status === 'online' && (
-                    <div style={styles.deviceVideoControl}>
-                      <input
-                        type="text"
-                        placeholder="Paste full video URL for this classroom..."
-                        value={deviceVideoUrls[device.deviceId] || ''}
-                        onChange={(e) => setDeviceVideoUrls(prev => ({
-                          ...prev,
-                          [device.deviceId]: e.target.value
-                        }))}
-                        style={styles.deviceUrlInput}
-                      />
-                      <button
-                        style={styles.devicePlayBtn}
-                        onClick={() => playToDevice(device.deviceId)}
-                        disabled={!deviceVideoUrls[device.deviceId]?.trim()}
-                        title="Play"
-                      >
-                        ▶
-                      </button>
-                      <button
-                        style={styles.deviceStopBtn}
-                        onClick={() => stopDevice(device.deviceId)}
-                        title="Stop"
-                      >
-                        ⏹
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Video Status */}
-                  {videoStates[device.deviceId] && (
-                    <div style={{
-                      ...styles.videoStatus,
-                      backgroundColor: videoStates[device.deviceId].state === 'playing' ? '#dcfce7' : '#f1f5f9',
-                    }}>
-                      <span style={styles.videoStatusText}>
-                        {videoStates[device.deviceId].state === 'playing' ? '▶ Playing' : videoStates[device.deviceId].state}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
+                  <span style={{ ...styles.sidebarIconBox, ...section.iconTone }}>{section.icon}</span>
+                  <span style={styles.sidebarItemLabel}>{section.label}</span>
+                  {section.badge ? <span style={styles.sidebarBadge}>{section.badge}</span> : null}
+                </button>
+              )
+            })}
           </div>
-        </div>
+        </aside>
 
-        {/* Center Panel - Preview */}
-        <div style={styles.panel}>
-          <h2 style={styles.panelTitle}>Live Preview</h2>
-          {isAnnouncing ? (
-            <div style={styles.previewContainer}>
-              <div style={styles.liveLabel}>LIVE</div>
-              <video
-                ref={localVideoRef}
-                autoPlay
-                muted
-                playsInline
-                style={styles.previewVideo}
-              />
-              <p style={styles.previewText}>Broadcasting to {announcementSession?.targetCount || selectedDevices.length} classroom(s)</p>
+        <div style={styles.contentWrap}>
+          {activePanel === 'attendance' ? (
+            <div style={styles.attendanceShell}>
+              <AttendanceSystem teacherMode />
+            </div>
+          ) : activePanel === 'monitor' ? (
+            <div style={styles.monitorShell}>
+              <CameraMonitor />
             </div>
           ) : (
-            <div style={styles.previewPlaceholder}>
-              <div style={styles.placeholderIcon}>📺</div>
-              <p>Start a live announcement to preview here</p>
-              <p style={styles.placeholderSub}>Select classrooms and click "Start Live"</p>
-            </div>
-          )}
-
-          {/* Saved Presets List */}
-          <div style={styles.presetsSection}>
-            <h3 style={styles.subTitle}>Saved Video Presets</h3>
-            <div style={styles.presetsList}>
-              {savedPresets.map(preset => (
-                <div key={preset.id} style={styles.presetItem}>
-                  <span style={styles.presetName}>{preset.name}</span>
-                  <button
-                    style={styles.presetLoadBtn}
-                    onClick={() => loadPreset(preset)}
-                  >
-                    Load
-                  </button>
-                  <button
-                    style={styles.presetDeleteBtn}
-                    onClick={() => deletePreset(preset.id)}
-                  >
-                    ×
-                  </button>
+            <>
+              <section style={styles.dashboardTopbar}>
+                <div>
+                  <div style={styles.topbarEyebrow}>Supernode</div>
+                  <h1 style={styles.topbarTitle}>Dashboard</h1>
+                  <p style={styles.topbarText}>A cleaner control surface for classes, attendance, media, and monitoring.</p>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Panel - Logs */}
-        <div style={styles.panel}>
-          <h2 style={styles.panelTitle}>Activity Log</h2>
-          <div style={styles.logList}>
-            {messages.map((msg, i) => (
-              <div key={i} style={{
-                ...styles.logEntry,
-                color: msg.type === 'error' ? '#ef4444' :
-                       msg.type === 'success' ? '#22c55e' : '#64748b'
-              }}>
-                <small style={styles.logTime}>[{msg.timestamp}]</small>
-                <span>{msg.text}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Health Status */}
-          {health && (
-            <div style={styles.healthSection}>
-              <h3 style={styles.subTitle}>System Status</h3>
-              <div style={styles.healthGrid}>
-                <div style={styles.healthItem}>
-                  <span>AI (Qwen)</span>
-                  <span style={{ color: health.components?.qwen?.available ? '#22c55e' : '#ef4444' }}>
-                    {health.components?.qwen?.available ? '✓ Online' : '✗ Offline'}
+                <div style={styles.topbarMeta}>
+                  <span style={styles.onlinePill}>
+                    <span style={{ ...styles.onlineDot, backgroundColor: connected ? '#22c55e' : '#ef4444' }} />
+                    {connected ? 'Connected' : 'Disconnected'}
                   </span>
+                  <div style={styles.metricRow}>
+                    <span style={styles.metricPill}>{onlineCount}/{classroomDevices.length} online</span>
+                    <span style={styles.metricPill}>{selectedDevices.length} selected</span>
+                    <span style={styles.metricPill}>{playingCount} playing</span>
+                  </div>
                 </div>
-                <div style={styles.healthItem}>
-                  <span>Devices</span>
-                  <span>{health.components?.devices?.online || 0} online</span>
+              </section>
+
+              <section style={styles.controlDeck}>
+                <div style={styles.controlDeckHead}>
+                  <div>
+                    <h2 style={styles.sectionTitle}>Command Center</h2>
+                    <p style={styles.sectionSub}>Run class display actions without the clutter.</p>
+                  </div>
+                  <div style={styles.commandActions}>
+                    <button type="button" style={styles.softButton} onClick={selectAllClassrooms}>
+                      Select All
+                    </button>
+                    <button type="button" style={styles.softButton} onClick={deselectAll}>
+                      Clear
+                    </button>
+                    <button type="button" style={styles.emergencyButton} onClick={() => setShowEmergencyModal(true)}>
+                      Emergency
+                    </button>
+                  </div>
+                </div>
+
+                <div style={styles.commandComposer}>
+                  <div style={styles.commandInputRow}>
+                    <select
+                      style={styles.cleanSelect}
+                      onChange={(e) => {
+                        const preset = savedPresets.find((item) => item.id === parseInt(e.target.value))
+                        if (preset) loadPreset(preset)
+                      }}
+                      value=""
+                    >
+                      <option value="">Presets</option>
+                      {savedPresets.map((preset) => (
+                        <option key={preset.id} value={preset.id}>
+                          {preset.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Paste video URL"
+                      value={globalVideoUrl}
+                      onChange={(e) => setGlobalVideoUrl(e.target.value)}
+                      style={styles.cleanInput}
+                    />
+                  </div>
+                  <div style={styles.commandButtonRow}>
+                    <button
+                      type="button"
+                      style={styles.primaryButton}
+                      onClick={playToSelected}
+                      disabled={!globalVideoUrl.trim() || selectedDevices.length === 0}
+                    >
+                      Play
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.softButton}
+                      onClick={stopAllSelected}
+                      disabled={selectedDevices.length === 0}
+                    >
+                      Stop
+                    </button>
+                    <button type="button" style={styles.softButton} onClick={() => setShowPresetModal(true)}>
+                      Save
+                    </button>
+                    {!isAnnouncing ? (
+                      <button
+                        type="button"
+                        style={styles.liveButton}
+                        onClick={startAnnouncement}
+                        disabled={selectedDevices.length === 0}
+                      >
+                        Start Live
+                      </button>
+                    ) : (
+                      <button type="button" style={styles.stopLiveButton} onClick={endAnnouncement}>
+                        End Live
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <div style={styles.cleanGrid}>
+                <section style={styles.roomsPanel}>
+                  <div style={styles.cardHeader}>
+                    <h3 style={styles.cardTitle}>Rooms</h3>
+                    <span style={styles.cardMeta}>{selectedDevices.length} selected</span>
+                  </div>
+
+                  <div style={styles.roomsList}>
+                    {classroomDevices.length === 0 ? (
+                      <div style={styles.emptyState}>No classrooms connected.</div>
+                    ) : (
+                      classroomDevices.map((device) => {
+                        const isSelected = selectedDevices.includes(device.deviceId)
+                        const isOnline = device.status === 'online'
+                        const roomState = videoStates[device.deviceId]
+
+                        return (
+                          <div
+                            key={device.deviceId}
+                            style={{
+                              ...styles.roomCard,
+                              ...(isSelected ? styles.roomCardActive : null),
+                              opacity: isOnline ? 1 : 0.65,
+                            }}
+                          >
+                            <div style={styles.roomHeader}>
+                              <label style={styles.roomCheckWrap}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleDeviceSelection(device.deviceId)}
+                                  disabled={!isOnline}
+                                  style={styles.checkbox}
+                                />
+                                <span style={styles.roomName}>{device.name || device.deviceId}</span>
+                              </label>
+                              <span
+                                style={{
+                                  ...styles.roomStatus,
+                                  backgroundColor: isOnline ? '#dcfce7' : '#fee2e2',
+                                  color: isOnline ? '#15803d' : '#b91c1c',
+                                }}
+                              >
+                                {device.status}
+                              </span>
+                            </div>
+
+                            {isOnline ? (
+                              <div style={styles.inlineControl}>
+                                <input
+                                  type="text"
+                                  placeholder="Room URL"
+                                  value={deviceVideoUrls[device.deviceId] || ''}
+                                  onChange={(e) =>
+                                    setDeviceVideoUrls((prev) => ({
+                                      ...prev,
+                                      [device.deviceId]: e.target.value,
+                                    }))
+                                  }
+                                  style={styles.roomInput}
+                                />
+                                <button type="button" style={styles.iconAction} onClick={() => playToDevice(device.deviceId)}>
+                                  Go
+                                </button>
+                                <button type="button" style={styles.iconActionMuted} onClick={() => stopDevice(device.deviceId)}>
+                                  Stop
+                                </button>
+                              </div>
+                            ) : null}
+
+                            {roomState ? <div style={styles.roomState}>{roomState.state === 'playing' ? 'Playing now' : roomState.state}</div> : null}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </section>
+
+                <div style={styles.dashboardRail}>
+                  <section style={styles.focusPanel}>
+                    <div style={styles.cardHeader}>
+                      <h3 style={styles.cardTitle}>Live Focus</h3>
+                      <span style={styles.cardMeta}>
+                        {selectedClassroomNames.length ? selectedClassroomNames.join(', ') : 'No class selected'}
+                      </span>
+                    </div>
+                    {isAnnouncing ? (
+                      <div style={styles.previewShell}>
+                        <div style={styles.liveTag}>Live</div>
+                        <video ref={localVideoRef} autoPlay muted playsInline style={styles.previewVideo} />
+                      </div>
+                    ) : (
+                      <div style={styles.previewEmpty}>
+                        <div style={styles.previewOrb} />
+                        <p style={styles.previewText}>Choose a class and start media or a live session when needed.</p>
+                      </div>
+                    )}
+                  </section>
+
+                  <section style={styles.activityPanel}>
+                    <div style={styles.cardHeader}>
+                      <h3 style={styles.cardTitle}>Recent Activity</h3>
+                      <span style={styles.cardMeta}>{recentMessages.length} recent</span>
+                    </div>
+
+                    <div style={styles.activityMetaRow}>
+                      <span style={styles.metricPill}>AI {health?.components?.qwen?.available ? 'ready' : 'offline'}</span>
+                      <span style={styles.metricPill}>{health?.components?.devices?.online || 0} devices</span>
+                    </div>
+
+                    <div style={styles.logStack}>
+                      {recentMessages.length === 0 ? (
+                        <div style={styles.emptyState}>No activity yet.</div>
+                      ) : (
+                        recentMessages.map((msg, index) => (
+                          <div key={`${msg.timestamp}-${index}`} style={styles.logRow}>
+                            <div style={styles.logTime}>{msg.timestamp}</div>
+                            <div
+                              style={{
+                                ...styles.logText,
+                                color: msg.type === 'error' ? '#dc2626' : msg.type === 'success' ? '#059669' : '#475569',
+                              }}
+                            >
+                              {msg.text}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
                 </div>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
 
-      {/* Save Preset Modal */}
       {showPresetModal && (
         <div style={styles.modalOverlay} onClick={() => setShowPresetModal(false)}>
-          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
             <h3 style={styles.modalTitle}>Save as Preset</h3>
             <input
               type="text"
-              placeholder="Preset name..."
+              placeholder="Preset name"
               value={newPresetName}
               onChange={(e) => setNewPresetName(e.target.value)}
               style={styles.modalInput}
             />
             <p style={styles.modalUrl}>URL: {globalVideoUrl}</p>
             <div style={styles.modalButtons}>
-              <button style={styles.modalCancel} onClick={() => setShowPresetModal(false)}>Cancel</button>
-              <button style={styles.modalSave} onClick={saveCurrentAsPreset}>Save Preset</button>
+              <button type="button" style={styles.modalCancel} onClick={() => setShowPresetModal(false)}>
+                Cancel
+              </button>
+              <button type="button" style={styles.modalSave} onClick={saveCurrentAsPreset}>
+                Save Preset
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Emergency Broadcast Modal */}
       {showEmergencyModal && (
         <div style={styles.modalOverlay} onClick={() => setShowEmergencyModal(false)}>
-          <div style={{ ...styles.modal, ...styles.emergencyModal }} onClick={e => e.stopPropagation()}>
-            <h3 style={styles.emergencyModalTitle}>EMERGENCY BROADCAST</h3>
-            <p style={styles.emergencyModalSub}>This will send an alert to ALL classroom displays</p>
+          <div style={{ ...styles.modal, ...styles.emergencyModal }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={styles.emergencyModalTitle}>Emergency Broadcast</h3>
+            <p style={styles.emergencyModalSub}>This message will be sent to every classroom display.</p>
             <input
               type="text"
-              placeholder="Enter emergency message..."
+              placeholder="Enter emergency message"
               value={emergencyMessage}
               onChange={(e) => setEmergencyMessage(e.target.value)}
               style={styles.emergencyInput}
               autoFocus
             />
             <div style={styles.modalButtons}>
-              <button style={styles.modalCancel} onClick={() => setShowEmergencyModal(false)}>Cancel</button>
+              <button type="button" style={styles.modalCancel} onClick={() => setShowEmergencyModal(false)}>
+                Cancel
+              </button>
               <button
+                type="button"
                 style={styles.emergencySendBtn}
                 onClick={sendEmergencyBroadcast}
                 disabled={!emergencyMessage.trim()}
               >
-                SEND EMERGENCY ALERT
+                Send Alert
               </button>
             </div>
           </div>
@@ -823,445 +760,837 @@ function SuperNode() {
 const styles = {
   container: {
     minHeight: '100vh',
-    backgroundColor: '#f1f5f9',
+    background:
+      'radial-gradient(circle at top left, rgba(129, 140, 248, 0.08), transparent 18%), radial-gradient(circle at bottom right, rgba(244, 114, 182, 0.08), transparent 22%), #ffffff',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
-  dashboardSwitcher: {
-    display: 'flex',
-    gap: '0.75rem',
-    padding: '1rem 1.5rem 0',
+  layout: {
+    display: 'grid',
+    gridTemplateColumns: '280px minmax(0, 1fr)',
+    gap: '1.6rem',
+    padding: '1.6rem',
+    alignItems: 'start',
   },
-  switcherButton: {
-    padding: '0.75rem 1rem',
+  sidebar: {
+    position: 'sticky',
+    top: '6rem',
+    backgroundColor: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: '2rem',
+    padding: '1.5rem 1.15rem',
+    boxShadow: '0 24px 60px rgba(148, 163, 184, 0.14)',
+  },
+  sidebarBrand: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.9rem',
+    marginBottom: '1.5rem',
+  },
+  sidebarLogo: {
+    display: 'grid',
+    placeItems: 'center',
+    width: '3.25rem',
+    height: '3.25rem',
+    borderRadius: '1.15rem',
+    background: 'linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%)',
+    color: '#ffffff',
+    fontWeight: 900,
+    fontSize: '1.2rem',
+    boxShadow: '0 16px 34px rgba(124, 58, 237, 0.28)',
+  },
+  sidebarTitle: {
+    fontSize: '2rem',
+    lineHeight: 1,
+    fontWeight: 800,
+    color: '#5b21b6',
+  },
+  sidebarSub: {
+    marginTop: '0.35rem',
+    fontSize: '0.85rem',
+    color: '#64748b',
+  },
+  sidebarMenu: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.7rem',
+  },
+  sidebarItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.9rem',
+    width: '100%',
+    border: 'none',
+    borderRadius: '1.25rem',
+    background: 'transparent',
+    padding: '0.72rem 0.85rem',
+    fontFamily: 'inherit',
+    cursor: 'pointer',
+    textAlign: 'left',
+    color: '#0f172a',
+  },
+  sidebarItemActive: {
+    backgroundColor: '#f1f5f9',
+    boxShadow: 'inset 0 0 0 1px #e2e8f0',
+  },
+  sidebarIconBox: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '3.1rem',
+    height: '3.1rem',
+    borderRadius: '1rem',
+    color: '#ffffff',
+    fontWeight: 800,
+    flexShrink: 0,
+  },
+  navIconDark: {
+    backgroundColor: '#364152',
+  },
+  navIconViolet: {
+    background: 'linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%)',
+  },
+  navIconGreen: {
+    background: 'linear-gradient(135deg, #16a34a 0%, #22c55e 100%)',
+  },
+  navIconOrange: {
+    background: 'linear-gradient(135deg, #fb923c 0%, #f59e0b 100%)',
+  },
+  navIconBlue: {
+    background: 'linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)',
+  },
+  sidebarItemLabel: {
+    fontSize: '1rem',
+    fontWeight: 700,
+    flex: 1,
+  },
+  sidebarBadge: {
+    padding: '0.2rem 0.55rem',
     borderRadius: '999px',
-    border: '1px solid rgba(148, 163, 184, 0.28)',
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: '#eef2ff',
+    color: '#5b21b6',
+    fontSize: '0.72rem',
+    fontWeight: 700,
+  },
+  contentWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem',
+    minWidth: 0,
+  },
+  dashboardTopbar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    gap: '1rem',
+    padding: '0.5rem 0.25rem 0.25rem',
+  },
+  topbarEyebrow: {
+    fontSize: '0.78rem',
+    fontWeight: 800,
+    letterSpacing: '0.16em',
+    textTransform: 'uppercase',
+    color: '#7c3aed',
+  },
+  topbarTitle: {
+    margin: '0.35rem 0 0.35rem',
+    fontSize: '3rem',
+    lineHeight: 0.96,
+    fontWeight: 900,
+    letterSpacing: '-0.06em',
+    color: '#172036',
+  },
+  topbarText: {
+    margin: 0,
+    maxWidth: '42rem',
+    color: '#64748b',
+    fontSize: '1rem',
+  },
+  topbarMeta: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '0.75rem',
+  },
+  metricRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: '0.6rem',
+  },
+  metricPill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    minHeight: '2.25rem',
+    padding: '0.45rem 0.9rem',
+    borderRadius: '999px',
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    border: '1px solid rgba(203, 213, 225, 0.8)',
+    color: '#334155',
+    fontSize: '0.84rem',
+    fontWeight: 700,
+    backdropFilter: 'blur(10px)',
+  },
+  controlDeck: {
+    background: 'rgba(255,255,255,0.82)',
+    border: '1px solid rgba(226, 232, 240, 0.9)',
+    borderRadius: '1.7rem',
+    padding: '1.25rem',
+    boxShadow: '0 18px 40px rgba(148, 163, 184, 0.1)',
+    backdropFilter: 'blur(16px)',
+  },
+  controlDeckHead: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: '1rem',
+    marginBottom: '1rem',
+  },
+  commandComposer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.85rem',
+  },
+  commandInputRow: {
+    display: 'grid',
+    gridTemplateColumns: '180px minmax(0, 1fr)',
+    gap: '0.85rem',
+  },
+  commandButtonRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '0.75rem',
+  },
+  cleanGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(320px, 0.92fr) minmax(0, 1.28fr)',
+    gap: '1rem',
+    alignItems: 'start',
+  },
+  roomsPanel: {
+    background: 'rgba(255,255,255,0.8)',
+    border: '1px solid rgba(226, 232, 240, 0.9)',
+    borderRadius: '1.7rem',
+    padding: '1.15rem',
+    boxShadow: '0 18px 40px rgba(148, 163, 184, 0.08)',
+    backdropFilter: 'blur(16px)',
+  },
+  dashboardRail: {
+    display: 'grid',
+    gap: '1rem',
+  },
+  focusPanel: {
+    background: 'rgba(255,255,255,0.8)',
+    border: '1px solid rgba(226, 232, 240, 0.9)',
+    borderRadius: '1.7rem',
+    padding: '1.15rem',
+    boxShadow: '0 18px 40px rgba(148, 163, 184, 0.08)',
+    backdropFilter: 'blur(16px)',
+  },
+  activityPanel: {
+    background: 'rgba(255,255,255,0.8)',
+    border: '1px solid rgba(226, 232, 240, 0.9)',
+    borderRadius: '1.7rem',
+    padding: '1.15rem',
+    boxShadow: '0 18px 40px rgba(148, 163, 184, 0.08)',
+    backdropFilter: 'blur(16px)',
+  },
+  activityMetaRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '0.65rem',
+    marginBottom: '0.9rem',
+  },
+  heroCard: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '1rem',
+    padding: '1.9rem 2rem',
+    background: 'linear-gradient(135deg, rgba(255,255,255,0.98), rgba(244,244,255,0.96))',
+    border: '1px solid #e2e8f0',
+    borderRadius: '2rem',
+    boxShadow: '0 24px 60px rgba(148, 163, 184, 0.14)',
+  },
+  heroChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '0.45rem 1rem',
+    borderRadius: '999px',
+    background: 'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',
+    color: '#ffffff',
+    fontWeight: 800,
+    fontSize: '0.85rem',
+  },
+  heroTitle: {
+    margin: '1rem 0 0.55rem',
+    fontSize: '2.5rem',
+    lineHeight: 1.04,
+    fontWeight: 900,
+    letterSpacing: '-0.05em',
+    color: '#172036',
+  },
+  heroText: {
+    margin: 0,
+    color: '#64748b',
+    fontSize: '1rem',
+    maxWidth: '42rem',
+  },
+  heroMeta: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '0.85rem',
+  },
+  onlinePill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.6rem',
+    padding: '0.7rem 1rem',
+    borderRadius: '999px',
+    backgroundColor: '#ffffff',
+    border: '1px solid #e2e8f0',
     color: '#334155',
     fontWeight: 700,
   },
-  switcherButtonActive: {
-    background: 'linear-gradient(135deg, #0f766e 0%, #0f172a 100%)',
-    color: '#ffffff',
-    border: 'none',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '1rem 2rem',
-    backgroundColor: '#1e293b',
-    color: 'white',
-  },
-  title: {
-    margin: 0,
-    fontSize: '1.5rem',
-    fontWeight: '600',
-  },
-  headerRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1.5rem',
-  },
-  deviceCount: {
-    fontSize: '0.875rem',
-    color: '#94a3b8',
-  },
-  connectionStatus: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontSize: '0.875rem',
-  },
-  statusDot: {
-    width: '10px',
-    height: '10px',
-    borderRadius: '50%',
-  },
-
-  // Control Bar
-  controlBar: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem',
-    padding: '0.75rem 2rem',
-    backgroundColor: 'white',
-    borderBottom: '1px solid #e2e8f0',
-    flexWrap: 'wrap',
-  },
-  attendanceCallout: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '1rem',
-    margin: '1rem 1.5rem',
-    padding: '1rem 1.25rem',
-    backgroundColor: 'white',
-    border: '1px solid #cbd5e1',
-    borderRadius: '1rem',
-  },
-  attendanceCalloutTitle: {
-    margin: 0,
-    fontSize: '1rem',
-    fontWeight: 700,
-    color: '#0f172a',
-  },
-  attendanceCalloutText: {
-    margin: '0.25rem 0 0',
-    fontSize: '0.9rem',
-    color: '#475569',
-    maxWidth: '55rem',
-  },
-  attendanceCalloutButton: {
-    padding: '0.75rem 1rem',
+  onlineDot: {
+    width: '0.65rem',
+    height: '0.65rem',
     borderRadius: '999px',
+  },
+  heroMascot: {
+    display: 'grid',
+    placeItems: 'center',
+    width: '5.5rem',
+    height: '5.5rem',
+    borderRadius: '1.8rem',
+    background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.95), rgba(217, 229, 255, 0.92))',
+    color: '#7c3aed',
+    fontSize: '1.35rem',
+    fontWeight: 900,
+    boxShadow: '0 18px 34px rgba(129, 140, 248, 0.18)',
+  },
+  statsRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gap: '1rem',
+  },
+  statCard: {
+    position: 'relative',
+    backgroundColor: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: '1.5rem',
+    padding: '1.2rem 1.25rem',
+    boxShadow: '0 16px 36px rgba(148, 163, 184, 0.1)',
+  },
+  statValue: {
+    marginTop: '0.2rem',
+    fontSize: '2rem',
+    fontWeight: 900,
+    color: '#172036',
+  },
+  statLabel: {
+    marginTop: '0.25rem',
+    color: '#64748b',
+    fontSize: '0.92rem',
+  },
+  commandCard: {
+    backgroundColor: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: '1.8rem',
+    padding: '1.35rem',
+    boxShadow: '0 20px 44px rgba(148, 163, 184, 0.1)',
+  },
+  commandTop: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '1rem',
+    marginBottom: '1rem',
+  },
+  sectionTitle: {
+    margin: 0,
+    fontSize: '1.15rem',
+    fontWeight: 800,
+    color: '#172036',
+  },
+  sectionSub: {
+    margin: '0.35rem 0 0',
+    color: '#64748b',
+    fontSize: '0.92rem',
+  },
+  commandActions: {
+    display: 'grid',
+    gridAutoFlow: 'column',
+    gap: '0.65rem',
+    justifyContent: 'end',
+  },
+  commandForm: {
+    display: 'grid',
+    gridTemplateColumns: '160px minmax(0, 1fr) repeat(4, auto)',
+    gap: '1rem',
+    alignItems: 'center',
+  },
+  cleanSelect: {
+    height: '3rem',
+    borderRadius: '1rem',
+    border: '1px solid #dbe4f0',
+    backgroundColor: '#f8fafc',
+    padding: '0 0.9rem',
+    color: '#334155',
+    fontSize: '0.92rem',
+  },
+  cleanInput: {
+    height: '3rem',
+    borderRadius: '1rem',
+    border: '1px solid #dbe4f0',
+    backgroundColor: '#f8fafc',
+    padding: '0 1rem',
+    fontSize: '0.92rem',
+  },
+  primaryButton: {
+    height: '3rem',
+    borderRadius: '1rem',
     border: 'none',
-    backgroundColor: '#0f766e',
-    color: 'white',
+    padding: '0 1.1rem',
+    background: 'linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%)',
+    color: '#ffffff',
+    fontWeight: 800,
+    cursor: 'pointer',
+  },
+  softButton: {
+    height: '3rem',
+    borderRadius: '1rem',
+    border: '1px solid #dbe4f0',
+    padding: '0 1rem',
+    backgroundColor: '#ffffff',
+    color: '#334155',
     fontWeight: 700,
     cursor: 'pointer',
   },
-  controlGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  selectBtn: {
-    padding: '0.5rem 1rem',
-    fontSize: '0.8rem',
-    border: '1px solid #cbd5e1',
-    borderRadius: '6px',
-    backgroundColor: 'white',
-    cursor: 'pointer',
-  },
-  selectedCount: {
-    fontSize: '0.8rem',
-    color: '#64748b',
-    marginLeft: '0.5rem',
-  },
-  presetSelect: {
-    padding: '0.5rem',
-    fontSize: '0.8rem',
-    border: '1px solid #cbd5e1',
-    borderRadius: '6px',
-    backgroundColor: 'white',
-    minWidth: '140px',
-  },
-  urlInput: {
-    padding: '0.5rem 1rem',
-    fontSize: '0.875rem',
-    border: '1px solid #cbd5e1',
-    borderRadius: '6px',
-    width: '280px',
-  },
-  actionBtn: {
-    padding: '0.5rem 1rem',
-    fontSize: '0.8rem',
-    fontWeight: '600',
+  liveButton: {
+    height: '3rem',
+    borderRadius: '1rem',
     border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    transition: 'opacity 0.2s',
-  },
-  playBtn: {
-    backgroundColor: '#22c55e',
-    color: 'white',
-  },
-  stopBtn: {
-    backgroundColor: '#ef4444',
-    color: 'white',
-  },
-  announceBtn: {
-    backgroundColor: '#8b5cf6',
-    color: 'white',
-  },
-  savePresetBtn: {
-    padding: '0.5rem 0.75rem',
-    fontSize: '0.8rem',
-    border: '1px solid #cbd5e1',
-    borderRadius: '6px',
-    backgroundColor: 'white',
+    padding: '0 1rem',
+    background: 'linear-gradient(135deg, #16a34a 0%, #22c55e 100%)',
+    color: '#ffffff',
+    fontWeight: 800,
     cursor: 'pointer',
   },
-  emergencyBtn: {
-    padding: '0.5rem 1.5rem',
-    fontSize: '0.8rem',
-    fontWeight: '700',
-    backgroundColor: '#dc2626',
-    color: 'white',
-    border: '2px solid #991b1b',
-    borderRadius: '6px',
+  stopLiveButton: {
+    height: '3rem',
+    borderRadius: '1rem',
+    border: 'none',
+    padding: '0 1rem',
+    background: 'linear-gradient(135deg, #ef4444 0%, #f97316 100%)',
+    color: '#ffffff',
+    fontWeight: 800,
     cursor: 'pointer',
-    marginLeft: 'auto',
   },
-
-  // Main Content
-  mainContent: {
+  emergencyButton: {
+    height: '3rem',
+    borderRadius: '1rem',
+    border: 'none',
+    padding: '0 1rem',
+    background: '#fee2e2',
+    color: '#b91c1c',
+    fontWeight: 800,
+    cursor: 'pointer',
+  },
+  dashboardGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1.2fr 1fr',
+    gridTemplateColumns: '1.1fr 1.4fr 0.8fr',
     gap: '1rem',
-    padding: '1rem',
-    height: 'calc(100vh - 140px)',
+    alignItems: 'start',
   },
-  panel: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    padding: '1rem',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    overflow: 'auto',
+  roomsCard: {
+    backgroundColor: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: '1.8rem',
+    padding: '1.2rem',
+    boxShadow: '0 20px 44px rgba(148, 163, 184, 0.1)',
   },
-  panelTitle: {
-    margin: '0 0 1rem 0',
-    fontSize: '1rem',
-    fontWeight: '600',
-    color: '#1e293b',
+  mainCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: '1.8rem',
+    padding: '1.2rem',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 20px 44px rgba(148, 163, 184, 0.1)',
+    minHeight: '28rem',
   },
-
-  // Device List
-  deviceList: {
+  rightCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: '1.8rem',
+    padding: '1.2rem',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 20px 44px rgba(148, 163, 184, 0.1)',
+  },
+  cardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '1rem',
+    marginBottom: '1rem',
+  },
+  cardTitle: {
+    margin: 0,
+    fontSize: '1.05rem',
+    fontWeight: 800,
+    color: '#172036',
+  },
+  cardMeta: {
+    color: '#64748b',
+    fontSize: '0.84rem',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    maxWidth: '16rem',
+  },
+  roomsList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.75rem',
+    gap: '0.8rem',
   },
-  noDevices: {
+  emptyState: {
+    display: 'grid',
+    placeItems: 'center',
+    minHeight: '12rem',
     color: '#94a3b8',
-    textAlign: 'center',
-    padding: '2rem',
+    backgroundColor: '#f8fafc',
+    borderRadius: '1.2rem',
   },
-  deviceCard: {
-    border: '2px solid #e5e7eb',
-    borderRadius: '10px',
-    padding: '0.75rem',
-    transition: 'all 0.2s',
+  roomCard: {
+    borderRadius: '1.25rem',
+    border: '1px solid #e2e8f0',
+    backgroundColor: '#ffffff',
+    padding: '0.95rem',
   },
-  deviceHeader: {
+  roomCardActive: {
+    backgroundColor: '#f5f3ff',
+    borderColor: '#c4b5fd',
+    boxShadow: '0 16px 28px rgba(139, 92, 246, 0.12)',
+  },
+  roomHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: '0.75rem',
+    alignItems: 'center',
+    marginBottom: '0.75rem',
+  },
+  roomCheckWrap: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.5rem',
-    marginBottom: '0.5rem',
+    gap: '0.65rem',
   },
   checkbox: {
     width: '18px',
     height: '18px',
     cursor: 'pointer',
   },
-  deviceName: {
-    fontWeight: '600',
-    flex: 1,
-    fontSize: '0.9rem',
+  roomName: {
+    fontSize: '0.95rem',
+    fontWeight: 700,
+    color: '#172036',
   },
-  statusBadge: {
-    padding: '0.2rem 0.6rem',
-    borderRadius: '9999px',
-    fontSize: '0.7rem',
-    color: 'white',
-    fontWeight: '500',
+  roomStatus: {
+    padding: '0.3rem 0.7rem',
+    borderRadius: '999px',
+    fontSize: '0.72rem',
+    fontWeight: 700,
   },
-  deviceVideoControl: {
+  inlineControl: {
     display: 'flex',
-    gap: '0.4rem',
-    marginTop: '0.5rem',
+    gap: '0.5rem',
+    alignItems: 'center',
   },
-  deviceUrlInput: {
+  roomInput: {
     flex: 1,
-    padding: '0.4rem 0.6rem',
-    fontSize: '0.75rem',
-    border: '1px solid #e2e8f0',
-    borderRadius: '4px',
+    height: '2.7rem',
+    padding: '0 0.85rem',
+    fontSize: '0.86rem',
+    border: '1px solid #dbe4f0',
+    borderRadius: '0.9rem',
+    backgroundColor: '#f8fafc',
   },
-  devicePlayBtn: {
-    padding: '0.4rem 0.6rem',
-    backgroundColor: '#22c55e',
-    color: 'white',
+  iconAction: {
+    height: '2.7rem',
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '0.9rem',
+    padding: '0 0.9rem',
+    background: 'linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%)',
+    color: '#ffffff',
+    fontWeight: 800,
     cursor: 'pointer',
-    fontSize: '0.75rem',
   },
-  deviceStopBtn: {
-    padding: '0.4rem 0.6rem',
-    backgroundColor: '#ef4444',
-    color: 'white',
+  iconActionMuted: {
+    height: '2.7rem',
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '0.9rem',
+    padding: '0 0.9rem',
+    backgroundColor: '#eef2ff',
+    color: '#475569',
+    fontWeight: 700,
     cursor: 'pointer',
-    fontSize: '0.75rem',
   },
-  videoStatus: {
-    marginTop: '0.5rem',
-    padding: '0.3rem 0.6rem',
-    borderRadius: '4px',
-    fontSize: '0.7rem',
+  roomState: {
+    marginTop: '0.7rem',
+    padding: '0.5rem 0.75rem',
+    borderRadius: '0.9rem',
+    backgroundColor: '#eff6ff',
+    color: '#2563eb',
+    fontSize: '0.8rem',
+    fontWeight: 700,
   },
-  videoStatusText: {
-    fontWeight: '500',
-  },
-
-  // Preview
-  previewContainer: {
+  previewShell: {
     position: 'relative',
-    backgroundColor: '#000',
-    borderRadius: '8px',
+    minHeight: '22rem',
+    borderRadius: '1.5rem',
     overflow: 'hidden',
+    background: '#0f172a',
   },
-  liveLabel: {
+  liveTag: {
     position: 'absolute',
-    top: '10px',
-    left: '10px',
+    top: '1rem',
+    left: '1rem',
+    zIndex: 1,
+    padding: '0.45rem 0.8rem',
+    borderRadius: '999px',
     backgroundColor: '#ef4444',
-    color: 'white',
-    padding: '4px 12px',
-    borderRadius: '4px',
-    fontSize: '0.75rem',
-    fontWeight: '700',
-    zIndex: 10,
+    color: '#ffffff',
+    fontWeight: 800,
+    fontSize: '0.8rem',
   },
   previewVideo: {
     width: '100%',
-    maxHeight: '300px',
-    backgroundColor: '#000',
+    height: '22rem',
+    objectFit: 'cover',
+    backgroundColor: '#000000',
+  },
+  previewEmpty: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '22rem',
+    background:
+      'radial-gradient(circle at center, rgba(196, 181, 253, 0.45), rgba(238, 242, 255, 0.85) 42%, rgba(255,255,255,0.96) 72%)',
+    borderRadius: '1.5rem',
+  },
+  previewOrb: {
+    width: '9rem',
+    height: '9rem',
+    borderRadius: '999px',
+    background: 'radial-gradient(circle at 35% 35%, rgba(255,255,255,0.95), rgba(192, 132, 252, 0.4), rgba(244, 114, 182, 0.18))',
+    boxShadow: '0 28px 54px rgba(192, 132, 252, 0.28)',
+    marginBottom: '1.1rem',
   },
   previewText: {
-    color: 'white',
+    color: '#64748b',
     textAlign: 'center',
     padding: '0.5rem',
     margin: 0,
     fontSize: '0.875rem',
   },
-  previewPlaceholder: {
+  presetStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.8rem',
+  },
+  presetRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '1rem',
+    padding: '0.9rem 1rem',
+    backgroundColor: '#f8fafc',
+    borderRadius: '1.15rem',
+    border: '1px solid #e2e8f0',
+  },
+  presetName: {
+    fontSize: '0.95rem',
+    fontWeight: 700,
+    color: '#172036',
+  },
+  presetUrl: {
+    marginTop: '0.25rem',
+    maxWidth: '24rem',
+    color: '#64748b',
+    fontSize: '0.76rem',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  presetActions: {
+    display: 'flex',
+    gap: '0.5rem',
+  },
+  softButtonSmall: {
+    border: '1px solid #dbe4f0',
+    backgroundColor: '#ffffff',
+    color: '#334155',
+    borderRadius: '0.85rem',
+    padding: '0.55rem 0.85rem',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  deleteButtonSmall: {
+    border: 'none',
+    backgroundColor: '#fee2e2',
+    color: '#b91c1c',
+    borderRadius: '0.85rem',
+    padding: '0.55rem 0.85rem',
+    fontWeight: 700,
+    cursor: 'pointer',
+  },
+  logStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+  },
+  logRow: {
+    display: 'flex',
+    gap: '0.9rem',
+    alignItems: 'flex-start',
+    padding: '0.8rem 0.9rem',
+    borderRadius: '1rem',
+    backgroundColor: '#f8fafc',
+    border: '1px solid #e2e8f0',
+  },
+  logTime: {
+    color: '#64748b',
+    flexShrink: 0,
+    minWidth: '4.6rem',
+    fontSize: '0.76rem',
+    fontWeight: 700,
+  },
+  logText: {
+    fontSize: '0.88rem',
+    lineHeight: 1.5,
+  },
+  overviewPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem',
+  },
+  overviewHighlight: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '3rem',
+    minHeight: '14rem',
+    borderRadius: '1.5rem',
     backgroundColor: '#f8fafc',
-    borderRadius: '8px',
-    color: '#64748b',
+    overflow: 'hidden',
+    border: '1px solid #e2e8f0',
   },
-  placeholderIcon: {
-    fontSize: '3rem',
+  overviewGlow: {
+    position: 'absolute',
+    width: '15rem',
+    height: '15rem',
+    borderRadius: '999px',
+    background: 'radial-gradient(circle, rgba(167, 139, 250, 0.42), rgba(244, 114, 182, 0.16), transparent 70%)',
+    filter: 'blur(12px)',
+  },
+  overviewValue: {
+    position: 'relative',
+    fontSize: '3.4rem',
+    fontWeight: 900,
+    color: '#172036',
+  },
+  overviewLabel: {
+    position: 'relative',
+    marginTop: '0.35rem',
+    color: '#64748b',
+    fontSize: '0.95rem',
+  },
+  quickGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '0.8rem',
+  },
+  quickAction: {
+    minHeight: '4rem',
+    borderRadius: '1.2rem',
+    border: '1px solid #e2e8f0',
+    backgroundColor: '#ffffff',
+    color: '#172036',
+    fontWeight: 800,
+    cursor: 'pointer',
+  },
+  healthStack: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.8rem',
     marginBottom: '1rem',
   },
-  placeholderSub: {
-    fontSize: '0.75rem',
-    color: '#94a3b8',
-    marginTop: '0.5rem',
-  },
-
-  // Presets
-  presetsSection: {
-    marginTop: '1.5rem',
-    paddingTop: '1rem',
-    borderTop: '1px solid #e2e8f0',
-  },
-  subTitle: {
-    margin: '0 0 0.75rem 0',
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    color: '#475569',
-  },
-  presetsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.5rem',
-  },
-  presetItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    padding: '0.5rem',
-    backgroundColor: '#f8fafc',
-    borderRadius: '6px',
-  },
-  presetName: {
-    flex: 1,
-    fontSize: '0.8rem',
-    fontWeight: '500',
-  },
-  presetLoadBtn: {
-    padding: '0.25rem 0.5rem',
-    fontSize: '0.7rem',
-    backgroundColor: '#3b82f6',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-  },
-  presetDeleteBtn: {
-    padding: '0.25rem 0.5rem',
-    fontSize: '0.8rem',
-    backgroundColor: 'transparent',
-    color: '#94a3b8',
-    border: 'none',
-    cursor: 'pointer',
-  },
-
-  // Logs
-  logList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.4rem',
-    maxHeight: '300px',
-    overflow: 'auto',
-  },
-  logEntry: {
-    fontSize: '0.75rem',
-    padding: '0.3rem 0',
-    borderBottom: '1px solid #f1f5f9',
-    display: 'flex',
-    gap: '0.5rem',
-  },
-  logTime: {
-    color: '#94a3b8',
-    flexShrink: 0,
-  },
-  healthSection: {
-    marginTop: '1.5rem',
-    paddingTop: '1rem',
-    borderTop: '1px solid #e2e8f0',
-  },
-  healthGrid: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.5rem',
-  },
-  healthItem: {
+  healthRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    fontSize: '0.8rem',
-    padding: '0.4rem 0',
+    gap: '0.75rem',
+    padding: '0.85rem 0.9rem',
+    borderRadius: '1rem',
+    backgroundColor: '#f8fafc',
+    border: '1px solid #e2e8f0',
+    color: '#334155',
+    fontSize: '0.9rem',
   },
-
-  // Modals
+  profileButton: {
+    width: '100%',
+    height: '3rem',
+    borderRadius: '1rem',
+    border: 'none',
+    background: 'linear-gradient(135deg, #818cf8 0%, #a78bfa 100%)',
+    color: '#ffffff',
+    fontWeight: 800,
+    cursor: 'pointer',
+  },
+  attendanceShell: {
+    overflow: 'hidden',
+    borderRadius: '2rem',
+    border: '1px solid #e2e8f0',
+    backgroundColor: '#ffffff',
+    boxShadow: '0 24px 60px rgba(148, 163, 184, 0.14)',
+  },
+  monitorShell: {
+    overflow: 'hidden',
+    borderRadius: '2rem',
+    border: '1px solid #e2e8f0',
+    backgroundColor: '#ffffff',
+    boxShadow: '0 24px 60px rgba(148, 163, 184, 0.14)',
+  },
   modalOverlay: {
     position: 'fixed',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
   },
   modal: {
-    backgroundColor: 'white',
-    borderRadius: '12px',
+    backgroundColor: '#ffffff',
+    borderRadius: '1.25rem',
     padding: '1.5rem',
     width: '400px',
     maxWidth: '90%',
+    boxShadow: '0 24px 60px rgba(15, 23, 42, 0.22)',
   },
   modalTitle: {
-    margin: '0 0 1rem 0',
+    margin: '0 0 1rem',
     fontSize: '1.1rem',
-    fontWeight: '600',
+    fontWeight: 700,
+    color: '#172036',
   },
   modalInput: {
     width: '100%',
-    padding: '0.75rem',
-    fontSize: '0.9rem',
-    border: '1px solid #e2e8f0',
-    borderRadius: '6px',
+    padding: '0.85rem 1rem',
+    fontSize: '0.92rem',
+    border: '1px solid #dbe4f0',
+    borderRadius: '0.9rem',
     marginBottom: '0.75rem',
   },
   modalUrl: {
@@ -1276,53 +1605,53 @@ const styles = {
     justifyContent: 'flex-end',
   },
   modalCancel: {
-    padding: '0.5rem 1rem',
+    padding: '0.7rem 1rem',
     fontSize: '0.875rem',
-    border: '1px solid #e2e8f0',
-    borderRadius: '6px',
-    backgroundColor: 'white',
+    border: '1px solid #dbe4f0',
+    borderRadius: '0.9rem',
+    backgroundColor: '#ffffff',
+    color: '#334155',
     cursor: 'pointer',
   },
   modalSave: {
-    padding: '0.5rem 1rem',
+    padding: '0.7rem 1rem',
     fontSize: '0.875rem',
-    backgroundColor: '#3b82f6',
-    color: 'white',
+    background: 'linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%)',
+    color: '#ffffff',
     border: 'none',
-    borderRadius: '6px',
+    borderRadius: '0.9rem',
     cursor: 'pointer',
   },
   emergencyModal: {
-    borderColor: '#dc2626',
-    border: '3px solid #dc2626',
+    border: '2px solid #fecaca',
   },
   emergencyModalTitle: {
-    margin: '0 0 0.5rem 0',
+    margin: '0 0 0.5rem',
     fontSize: '1.2rem',
-    fontWeight: '700',
-    color: '#dc2626',
+    fontWeight: 800,
+    color: '#b91c1c',
   },
   emergencyModalSub: {
-    fontSize: '0.8rem',
+    fontSize: '0.84rem',
     color: '#64748b',
     marginBottom: '1rem',
   },
   emergencyInput: {
     width: '100%',
-    padding: '0.75rem',
-    fontSize: '1rem',
-    border: '2px solid #fecaca',
-    borderRadius: '6px',
+    padding: '0.85rem 1rem',
+    fontSize: '0.95rem',
+    border: '1px solid #fecaca',
+    borderRadius: '0.9rem',
     marginBottom: '1rem',
   },
   emergencySendBtn: {
-    padding: '0.75rem 1.5rem',
+    padding: '0.75rem 1.1rem',
     fontSize: '0.9rem',
-    fontWeight: '700',
+    fontWeight: 800,
     backgroundColor: '#dc2626',
-    color: 'white',
+    color: '#ffffff',
     border: 'none',
-    borderRadius: '6px',
+    borderRadius: '0.9rem',
     cursor: 'pointer',
   },
 }
