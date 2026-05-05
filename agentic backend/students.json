@@ -71,18 +71,34 @@
       "className": "10",
       "section": "A",
       "sampleImagePaths": [
-        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki.jpg",
-        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_2.jpg",
-        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_3.jpg",
-        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_4.jpg",
-        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_5.jpg",
-        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_6.jpg",
-        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_7.jpg",
-        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_8.jpg",
-        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_9.jpg",
-        "E:\\Project\\class.ai\\agentic backend\\Attendance by ArcFace\\dataset\\PrantiK Sanki_10.jpg"
+        "Attendance by ArcFace\\dataset\\PrantiK Sanki.jpg",
+        "Attendance by ArcFace\\dataset\\PrantiK Sanki_2.jpg",
+        "Attendance by ArcFace\\dataset\\PrantiK Sanki_3.jpg",
+        "Attendance by ArcFace\\dataset\\PrantiK Sanki_4.jpg",
+        "Attendance by ArcFace\\dataset\\PrantiK Sanki_5.jpg",
+        "Attendance by ArcFace\\dataset\\PrantiK Sanki_6.jpg",
+        "Attendance by ArcFace\\dataset\\PrantiK Sanki_7.jpg",
+        "Attendance by ArcFace\\dataset\\PrantiK Sanki_8.jpg",
+        "Attendance by ArcFace\\dataset\\PrantiK Sanki_9.jpg",
+        "Attendance by ArcFace\\dataset\\PrantiK Sanki_10.jpg"
       ],
       "registeredAt": "2026-05-05T06:24:34.339886Z"
+    },
+    {
+      "id": "1bebc0c5-9b55-4cdd-821e-8cf40b823dbb",
+      "name": "Santosh Panda Sir",
+      "rollNumber": "R214223`1",
+      "className": "AIML",
+      "section": "T",
+      "parentMobile": "",
+      "sampleImagePaths": [
+        "Attendance by ArcFace\\dataset\\Santosh Panda Sir.jpg",
+        "Attendance by ArcFace\\dataset\\Santosh Panda Sir_2.jpg",
+        "Attendance by ArcFace\\dataset\\Santosh Panda Sir_3.jpg",
+        "Attendance by ArcFace\\dataset\\Santosh Panda Sir_4.jpg",
+        "Attendance by ArcFace\\dataset\\Santosh Panda Sir_5.jpg"
+      ],
+      "registeredAt": "2026-05-05T11:49:44.843209Z"
     }
   ]
 }
