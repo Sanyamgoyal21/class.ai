@@ -99,6 +99,30 @@
         "Attendance by ArcFace\\dataset\\Santosh Panda Sir_5.jpg"
       ],
       "registeredAt": "2026-05-05T11:49:44.843209Z"
+    },
+    {
+      "id": "7067b176-c566-4b52-bf12-5252c492dca2",
+      "name": "Prantik Sanki",
+      "rollNumber": "R2142231381",
+      "className": "B.Tech CSE",
+      "section": "AI ML",
+      "parentMobile": "9339669870",
+      "parentEmail": "prantiksanki@gmail.com",
+      "sampleImagePaths": [
+        "Attendance by ArcFace\\dataset\\Prantik Sanki.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_2.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_3.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_4.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_5.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_6.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_7.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_8.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_9.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_10.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_11.jpg",
+        "Attendance by ArcFace\\dataset\\Prantik Sanki_12.jpg"
+      ],
+      "registeredAt": "2026-05-05T17:38:40.360978Z"
     }
   ]
 }

@@ -350,7 +350,10 @@ function RecordsPanel() {
       const body = { date: filters.date }
       if (filters.className) body.className = filters.className
       if (filters.section)   body.section   = filters.section
-      const res = await fetch(`${BACKEND_URL}/api/attendance/notify-absent`, {
+      const notifyUrl = BACKEND_URL.includes('localhost') || BACKEND_URL.includes('127.0.0.1')
+        ? BACKEND_URL
+        : 'http://localhost:5000'
+      const res = await fetch(`${notifyUrl}/api/attendance/notify-absent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
