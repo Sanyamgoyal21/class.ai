@@ -98,14 +98,25 @@ async function ensureAttendanceServiceRunning() {
 
 attendanceServiceStartupPromise = ensureAttendanceServiceRunning();
 
+async function ensureAttendanceServiceAvailable() {
+  if (attendanceServiceStartupPromise) {
+    await attendanceServiceStartupPromise;
+  }
+
+  if (await waitForAttendanceService(attendanceServiceUrl, 1000)) {
+    return;
+  }
+
+  attendanceServiceStartupPromise = ensureAttendanceServiceRunning();
+  await attendanceServiceStartupPromise;
+}
+
 function sseWrite(res, payload) {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
 async function proxyAttendanceRequest(res, config) {
-  if (attendanceServiceStartupPromise) {
-    await attendanceServiceStartupPromise;
-  }
+  await ensureAttendanceServiceAvailable();
 
   console.log("[attendance-proxy] forwarding request:", {
     method: config.method?.toUpperCase(),
@@ -117,7 +128,7 @@ async function proxyAttendanceRequest(res, config) {
 
   try {
     const response = await axios({
-      timeout: 45000,
+      timeout: config.timeout ?? 45000,
       validateStatus: () => true,
       ...config,
     });
@@ -139,7 +150,9 @@ async function proxyAttendanceRequest(res, config) {
   } catch (error) {
     console.error("Attendance proxy error:", error.message);
     return res.status(502).json({
-      error: "Attendance service unavailable",
+      error: error.code === "ECONNABORTED"
+        ? "Attendance service took too long to respond"
+        : "Attendance service unavailable",
       detail: error.message,
     });
   }
@@ -2459,12 +2472,51 @@ app.post("/api/attendance/detect-face", async (req, res) => {
 });
 
 app.post("/api/attendance/recognize", async (req, res) => {
-  return proxyAttendanceRequest(res, {
+  await ensureAttendanceServiceAvailable();
+
+  const requestConfig = {
     method: "post",
-    url: attendanceUrl("/attendance/recognize"),
     headers: { "Content-Type": "application/json" },
     data: req.body,
-  });
+  };
+
+  try {
+    const response = await axios({
+      ...requestConfig,
+      url: attendanceUrl("/attendance/recognize"),
+      timeout: 45000,
+      validateStatus: () => true,
+    });
+
+    if (response.status !== 404) {
+      return res.status(response.status).json(response.data);
+    }
+
+    const fallbackResponse = await axios({
+      ...requestConfig,
+      url: attendanceUrl("/attendance/detect-face"),
+      timeout: 45000,
+      validateStatus: () => true,
+    });
+
+    const fallbackData = fallbackResponse.data || {};
+    const result = fallbackData.result || (
+      fallbackData.face || fallbackData.match
+        ? {
+            face: fallbackData.face || null,
+            match: fallbackData.match || null,
+            confidence: fallbackData.confidence || null,
+            detectedAt: fallbackData.detectedAt || new Date().toISOString(),
+            alreadyPresent: Boolean(fallbackData.alreadyPresent),
+          }
+        : null
+    );
+
+    return res.status(fallbackResponse.status).json({ ...fallbackData, result });
+  } catch (error) {
+    console.error("Attendance recognize proxy error:", error.message);
+    return res.status(502).json({ error: "Attendance service unavailable", detail: error.message });
+  }
 });
 
 app.post("/api/attendance/students/register", async (req, res) => {
@@ -2479,6 +2531,7 @@ app.post("/api/attendance/students/register", async (req, res) => {
       "Content-Type": "application/json",
     },
     data: req.body,
+    timeout: 180000,
   });
 });
 

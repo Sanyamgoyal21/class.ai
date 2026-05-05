@@ -15,13 +15,19 @@ import cv2
 import face_recognition
 import numpy as np
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import ASCENDING, DESCENDING
+try:
+    from motor.motor_asyncio import AsyncIOMotorClient
+except ModuleNotFoundError:
+    from pymongo import AsyncMongoClient as AsyncIOMotorClient
+from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 BASE_DIR = Path(__file__).parent
+load_dotenv(BASE_DIR / ".env")
+
 ARCFACE_DIR = BASE_DIR / "Attendance by ArcFace"
 DATASET_PATH = ARCFACE_DIR / "dataset"
 STUDENTS_FILE = BASE_DIR / "students.json"
@@ -909,7 +915,7 @@ async def update_record(record_id: str, request: Request):
         result = await _db.attendance.find_one_and_update(
             {"id": record_id},
             {"$set": {"status": status, "markedAt": datetime.utcnow().isoformat() + "Z"}},
-            return_document=True,
+            return_document=ReturnDocument.AFTER,
         )
         if result:
             _strip_mongo_id(result)

@@ -1,9 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
-import { ATTENDANCE_API_URL as _BASE } from '../utils/backendUrl'
-
-const ATTENDANCE_API_URL = _BASE.includes('localhost') || _BASE.includes('127.0.0.1')
-  ? _BASE
-  : 'http://localhost:8000/attendance'
+import { ATTENDANCE_API_URL } from '../utils/backendUrl'
 
 const RECOGNIZE_INTERVAL_MS = 900
 const PERSON_COOLDOWN_MS    = 12000
