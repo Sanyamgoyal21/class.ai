@@ -1,8 +1,7 @@
 const configuredBackendUrl = import.meta.env.VITE_BACKEND_URL || 'https://classai-backend.onrender.com'
 export const BACKEND_URL = configuredBackendUrl.replace(/\/$/, '')
 
-// Attendance API talks directly to the local Python service.
-// VITE_ATTENDANCE_URL defaults to localhost:8000 so images go straight
-// to the machine running the Python backend — not through the Render proxy.
-const configuredAttendanceUrl = import.meta.env.VITE_ATTENDANCE_URL || 'http://localhost:8000'
+// Attendance API goes through the Node backend proxy by default. The proxy can
+// start the local Python service and keeps route compatibility in one place.
+const configuredAttendanceUrl = import.meta.env.VITE_ATTENDANCE_URL || `${BACKEND_URL}/api`
 export const ATTENDANCE_API_URL = `${configuredAttendanceUrl.replace(/\/$/, '')}/attendance`
