@@ -2811,6 +2811,168 @@ Use exactly this structure:
   }
 });
 
+// =================== YOUTUBE QUIZ API ===================
+
+function extractYouTubeVideoId(url) {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+async function fetchYouTubeTranscript(videoId) {
+  try {
+    // Fetch YouTube's timedtext API (works for auto-generated captions)
+    const response = await axios.get(
+      `https://www.youtube.com/watch?v=${videoId}`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, timeout: 10000 }
+    );
+    const html = response.data;
+
+    // Extract caption tracks from the page
+    const captionMatch = html.match(/"captionTracks":\[(.*?)\]/);
+    if (!captionMatch) return null;
+
+    const tracksJson = JSON.parse(`[${captionMatch[1]}]`);
+    if (!tracksJson.length) return null;
+
+    // Prefer English captions
+    const track = tracksJson.find(t => t.languageCode === 'en') || tracksJson[0];
+    if (!track?.baseUrl) return null;
+
+    const captionRes = await axios.get(track.baseUrl, { timeout: 10000 });
+    const xmlText = captionRes.data;
+
+    // Parse XML caption text
+    const textMatches = xmlText.match(/<text[^>]*>([^<]*)<\/text>/g) || [];
+    const transcript = textMatches
+      .map(tag => tag.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim())
+      .filter(Boolean)
+      .join(' ');
+
+    return transcript.length > 100 ? transcript : null;
+  } catch (err) {
+    console.warn('[Quiz] Transcript fetch failed:', err.message);
+    return null;
+  }
+}
+
+async function generateQuizQuestions(transcript, videoTitle, className, questionCount = 5) {
+  if (!process.env.OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY not configured');
+  }
+
+  const classContext = className
+    ? `This is for students of class: ${className}. Adjust difficulty and vocabulary accordingly.`
+    : 'Adjust difficulty for a general student audience.';
+
+  const systemPrompt = `You are an expert teacher generating quiz questions for a classroom video session.
+
+${classContext}
+
+Generate exactly ${questionCount} questions based on the video content provided.
+
+Rules:
+- Questions must be based strictly on the video content
+- Use simple, clear language appropriate for the class level
+- Each question should have ONE correct short answer (1-5 words)
+- Make questions progressively harder
+- Mix factual and conceptual questions
+- Avoid trick questions
+
+Respond with ONLY valid JSON, no markdown, no extra text:
+{
+  "videoTitle": "...",
+  "className": "...",
+  "questions": [
+    {
+      "id": 1,
+      "question": "What is ...?",
+      "expectedAnswer": "...",
+      "hint": "Think about what was explained when ...",
+      "difficulty": "easy"
+    }
+  ]
+}`;
+
+  const userPrompt = transcript
+    ? `Video Title: ${videoTitle || 'Educational Video'}\nTranscript:\n${transcript.slice(0, 6000)}`
+    : `Video Title: ${videoTitle || 'Educational Video'}\n\nNote: No transcript available. Generate general questions about the topic suggested by the title.`;
+
+  const raw = await callOpenRouter(systemPrompt, userPrompt);
+  return parseJsonResponse(raw);
+}
+
+app.post('/api/quiz/prepare', async (req, res) => {
+  const { url, className, questionCount = 5 } = req.body;
+
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'url is required' });
+  }
+
+  const videoId = extractYouTubeVideoId(url);
+  if (!videoId) {
+    return res.status(400).json({ error: 'Invalid YouTube URL' });
+  }
+
+  try {
+    console.log(`[Quiz] Preparing quiz for video ${videoId}, class: ${className}`);
+
+    const [transcript] = await Promise.all([
+      fetchYouTubeTranscript(videoId),
+    ]);
+
+    const videoTitle = `YouTube Video (${videoId})`;
+    const quiz = await generateQuizQuestions(transcript, videoTitle, className, Math.min(questionCount, 10));
+
+    return res.json({
+      success: true,
+      videoId,
+      transcript: transcript ? transcript.slice(0, 500) + '...' : null,
+      quiz,
+    });
+  } catch (err) {
+    console.error('[Quiz] Prepare error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/quiz/evaluate', async (req, res) => {
+  const { question, expectedAnswer, studentAnswer, className } = req.body;
+
+  if (!question || !expectedAnswer || !studentAnswer) {
+    return res.status(400).json({ error: 'question, expectedAnswer, and studentAnswer are required' });
+  }
+
+  try {
+    const systemPrompt = `You are a classroom teacher evaluating a student's spoken answer.
+Be encouraging and fair. Accept synonyms and paraphrasing as correct.
+${className ? `This is for class: ${className}.` : ''}
+
+Respond with ONLY valid JSON:
+{
+  "isCorrect": true or false,
+  "score": 0 to 10,
+  "feedback": "Short encouraging feedback (1-2 sentences)",
+  "correctAnswer": "The full correct answer to display"
+}`;
+
+    const userPrompt = `Question: ${question}\nExpected Answer: ${expectedAnswer}\nStudent's Answer: ${studentAnswer}`;
+    const raw = await callOpenRouter(systemPrompt, userPrompt);
+    const result = parseJsonResponse(raw);
+
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[Quiz] Evaluate error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 
 httpServer.listen(PORT, () => {

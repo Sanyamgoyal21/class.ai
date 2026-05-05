@@ -375,9 +375,277 @@
       0%, 80%, 100% { transform: scale(0); }
       40% { transform: scale(1); }
     }
+
+    /* =================== CLASS SELECTOR MODAL =================== */
+    #class-selector-modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.92);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+    }
+
+    #class-selector-modal.hidden { display: none; }
+
+    .class-modal-card {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 20px;
+      padding: 48px 56px;
+      max-width: 520px;
+      width: 90%;
+      text-align: center;
+    }
+
+    .class-modal-card h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+
+    .class-modal-card p {
+      color: #94a3b8;
+      margin-bottom: 32px;
+      font-size: 1rem;
+    }
+
+    .class-modal-card select {
+      width: 100%;
+      padding: 14px 18px;
+      background: #1e293b;
+      border: 1.5px solid #334155;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 1.1rem;
+      margin-bottom: 24px;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+    }
+
+    .class-modal-card select:focus {
+      outline: none;
+      border-color: #6366f1;
+    }
+
+    .class-modal-card button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .class-modal-card button:hover { opacity: 0.9; }
+    .class-modal-card button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* =================== QUIZ OVERLAY =================== */
+    #quiz-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.93);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 160;
+      padding: 40px;
+    }
+
+    #quiz-overlay.active { display: flex; }
+
+    #quiz-badge {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #6366f1;
+      color: white;
+      padding: 10px 30px;
+      border-radius: 25px;
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: 0.05em;
+      animation: quizPulse 2s infinite;
+    }
+
+    @keyframes quizPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.6); }
+      50% { box-shadow: 0 0 0 14px rgba(99, 102, 241, 0); }
+    }
+
+    #quiz-progress {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+
+    #quiz-question-text {
+      font-size: 2.2rem;
+      font-weight: 700;
+      text-align: center;
+      max-width: 80%;
+      color: #fff;
+      line-height: 1.4;
+      margin-bottom: 40px;
+    }
+
+    #quiz-status-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      min-height: 180px;
+      justify-content: center;
+    }
+
+    #quiz-listening-badge {
+      background: #dc2626;
+      color: white;
+      padding: 10px 28px;
+      border-radius: 30px;
+      font-size: 1rem;
+      font-weight: 600;
+      display: none;
+      animation: listeningPulse 1s infinite;
+    }
+
+    @keyframes listeningPulse {
+      0%, 100% { background: #dc2626; }
+      50% { background: #ef4444; }
+    }
+
+    #quiz-transcript-display {
+      font-size: 1.4rem;
+      color: #e2e8f0;
+      text-align: center;
+      min-height: 50px;
+      font-style: italic;
+    }
+
+    #quiz-result-card {
+      background: #0f172a;
+      border-radius: 16px;
+      padding: 28px 40px;
+      text-align: center;
+      border: 2px solid #1e293b;
+      min-width: 400px;
+      display: none;
+    }
+
+    #quiz-result-card.show { display: block; }
+
+    #quiz-result-icon {
+      font-size: 3.5rem;
+      margin-bottom: 10px;
+    }
+
+    #quiz-result-verdict {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    #quiz-result-feedback {
+      color: #94a3b8;
+      font-size: 1.1rem;
+      margin-bottom: 12px;
+    }
+
+    #quiz-correct-answer {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 12px 20px;
+      color: #a3e635;
+      font-size: 1rem;
+    }
+
+    #quiz-timer-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 4px;
+      background: #6366f1;
+      width: 100%;
+      transform-origin: left;
+      transition: transform linear;
+    }
+
+    #quiz-score-summary {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #64748b;
+      font-size: 0.9rem;
+    }
   </style>
 </head>
 <body>
+  <!-- Class Selector Modal (shown after device registers) -->
+  <div id="class-selector-modal" class="hidden">
+    <div class="class-modal-card">
+      <h2>Which class is this?</h2>
+      <p>Select the class so the AI can generate the right questions for your students.</p>
+      <select id="class-dropdown">
+        <option value="" disabled selected>-- Select Class --</option>
+        <optgroup label="Primary">
+          <option value="Class 1">Class 1</option>
+          <option value="Class 2">Class 2</option>
+          <option value="Class 3">Class 3</option>
+          <option value="Class 4">Class 4</option>
+          <option value="Class 5">Class 5</option>
+        </optgroup>
+        <optgroup label="Middle School">
+          <option value="Class 6">Class 6</option>
+          <option value="Class 7">Class 7</option>
+          <option value="Class 8">Class 8</option>
+        </optgroup>
+        <optgroup label="Secondary">
+          <option value="Class 9">Class 9</option>
+          <option value="Class 10">Class 10</option>
+        </optgroup>
+        <optgroup label="Higher Secondary">
+          <option value="Class 11 Science">Class 11 (Science)</option>
+          <option value="Class 11 Commerce">Class 11 (Commerce)</option>
+          <option value="Class 11 Arts">Class 11 (Arts)</option>
+          <option value="Class 12 Science">Class 12 (Science)</option>
+          <option value="Class 12 Commerce">Class 12 (Commerce)</option>
+          <option value="Class 12 Arts">Class 12 (Arts)</option>
+        </optgroup>
+        <optgroup label="Higher Education">
+          <option value="B.Tech Year 1">B.Tech - Year 1</option>
+          <option value="B.Tech Year 2">B.Tech - Year 2</option>
+          <option value="B.Tech Year 3">B.Tech - Year 3</option>
+          <option value="B.Tech Year 4">B.Tech - Year 4</option>
+          <option value="B.Sc Year 1">B.Sc - Year 1</option>
+          <option value="B.Sc Year 2">B.Sc - Year 2</option>
+          <option value="B.Sc Year 3">B.Sc - Year 3</option>
+          <option value="M.Tech / M.Sc">M.Tech / M.Sc</option>
+        </optgroup>
+        <optgroup label="Coaching">
+          <option value="JEE Preparation">JEE Preparation</option>
+          <option value="NEET Preparation">NEET Preparation</option>
+          <option value="UPSC Preparation">UPSC Preparation</option>
+          <option value="General Coaching">General Coaching</option>
+        </optgroup>
+      </select>
+      <button id="class-confirm-btn" disabled>Confirm &amp; Enter</button>
+    </div>
+  </div>
+
   <div id="container">
     <!-- Status Bar (visible on hover) -->
     <div id="status-bar">
@@ -440,6 +708,25 @@
         </div>
       </div>
       <div id="doubt-hint">Say <span>"okay"</span> or <span>"understood"</span> to resume the video</div>
+    </div>
+
+    <!-- Quiz Overlay -->
+    <div id="quiz-overlay">
+      <div id="quiz-badge">QUIZ TIME</div>
+      <div id="quiz-progress">Question 1 / 5</div>
+      <div id="quiz-question-text">Loading question...</div>
+      <div id="quiz-status-area">
+        <div id="quiz-listening-badge">Listening...</div>
+        <div id="quiz-transcript-display"></div>
+        <div id="quiz-result-card">
+          <div id="quiz-result-icon"></div>
+          <div id="quiz-result-verdict"></div>
+          <div id="quiz-result-feedback"></div>
+          <div id="quiz-correct-answer"></div>
+        </div>
+      </div>
+      <div id="quiz-score-summary"></div>
+      <div id="quiz-timer-bar"></div>
     </div>
   </div>
 
@@ -635,6 +922,11 @@
         if (data.success) {
           console.log('[Classroom] Registered successfully');
 
+          // Show class selector if not yet chosen
+          if (!selectedClassName) {
+            classSelectorModal.classList.remove('hidden');
+          }
+
           // Start heartbeat to keep connection alive
           setInterval(() => {
             socket.emit('device:heartbeat', {
@@ -690,12 +982,52 @@
       socket.on('control:command', handleControlCommand);
     }
 
+    // =================== QUIZ SCHEDULER (defined early so handleVideoPlay can call it) ===================
+
+    let quizScheduler = null;
+
+    function stopQuizScheduler() {
+      if (Array.isArray(quizScheduler)) {
+        quizScheduler.forEach(t => clearTimeout(t));
+      }
+      quizScheduler = null;
+    }
+
+    function startQuizScheduler(videoUrl) {
+      stopQuizScheduler();
+
+      const firstTrigger = 1 * 60 * 1000; // 1 minute for testing (change to 15 * 60 * 1000 for production)
+      const intervals = [
+        firstTrigger,
+        firstTrigger + (12 + Math.random() * 6) * 60 * 1000,
+        firstTrigger + (24 + Math.random() * 6) * 60 * 1000,
+      ];
+
+      console.log('[Quiz] Scheduler armed:', intervals.map(ms => `${Math.round(ms / 1000)}s`).join(', '));
+
+      quizScheduler = intervals.map((delay, idx) => {
+        return setTimeout(async () => {
+          if (quizState.active) { console.log('[Quiz] Skipping trigger — quiz already active'); return; }
+          if (!currentVideoUrl) { console.log('[Quiz] Skipping trigger — no video playing'); return; }
+          if (!selectedClassName) { console.log('[Quiz] Skipping trigger — no class selected'); return; }
+          console.log(`[Quiz] Auto-trigger ${idx + 1} fired`);
+          await prepareAndStartQuiz(videoUrl);
+        }, delay);
+      });
+    }
+
     // =================== VIDEO PLAYBACK ===================
 
     function handleVideoPlay(data) {
       console.log('[Classroom] Video play command:', data.url);
       const { url, autoPlay = true, volume = 1.0, title, topic } = data;
       const playableUrl = getPlayableVideoUrl(url);
+
+      // Always arm scheduler when a video starts — quiz will check selectedClassName at fire time
+      if (playableUrl) {
+        stopQuizScheduler();
+        startQuizScheduler(playableUrl);
+      }
 
       if (!playableUrl) {
         console.error('[Classroom] Unsupported video input:', url);
@@ -1776,6 +2108,359 @@ If no context is available, answer the question to the best of your ability.`;
         console.warn('[Classroom] Could not start voice commands:', e.message);
       }
     }
+
+    // =================== CLASS SELECTOR ===================
+
+    let selectedClassName = '';
+
+    const classSelectorModal = document.getElementById('class-selector-modal');
+    const classDropdown = document.getElementById('class-dropdown');
+    const classConfirmBtn = document.getElementById('class-confirm-btn');
+
+    classDropdown.addEventListener('change', () => {
+      classConfirmBtn.disabled = !classDropdown.value;
+    });
+
+    classConfirmBtn.addEventListener('click', () => {
+      if (!classDropdown.value) return;
+      selectedClassName = classDropdown.value;
+      classSelectorModal.classList.add('hidden');
+
+      // Tell the server which class this is
+      if (socket && socket.connected) {
+        socket.emit('quiz:set-class', { className: selectedClassName });
+      }
+
+      console.log('[Quiz] Class selected:', selectedClassName);
+
+      // If video is already playing, start the quiz scheduler now
+      if (currentVideoUrl) {
+        stopQuizScheduler();
+        startQuizScheduler(currentVideoUrl);
+      }
+    });
+
+    // =================== QUIZ ENGINE ===================
+
+    const quizOverlay = document.getElementById('quiz-overlay');
+    const quizBadge = document.getElementById('quiz-badge');
+    const quizProgress = document.getElementById('quiz-progress');
+    const quizQuestionText = document.getElementById('quiz-question-text');
+    const quizListeningBadge = document.getElementById('quiz-listening-badge');
+    const quizTranscriptDisplay = document.getElementById('quiz-transcript-display');
+    const quizResultCard = document.getElementById('quiz-result-card');
+    const quizResultIcon = document.getElementById('quiz-result-icon');
+    const quizResultVerdict = document.getElementById('quiz-result-verdict');
+    const quizResultFeedback = document.getElementById('quiz-result-feedback');
+    const quizCorrectAnswer = document.getElementById('quiz-correct-answer');
+    const quizTimerBar = document.getElementById('quiz-timer-bar');
+    const quizScoreSummary = document.getElementById('quiz-score-summary');
+
+    let quizState = {
+      active: false,
+      questions: [],
+      currentIndex: 0,
+      totalScore: 0,
+      intervalId: null,
+      speechRec: null,
+      timerTimeout: null,
+    };
+
+    // TTS: speak text aloud
+    function speak(text, onEnd) {
+      if (!window.speechSynthesis) {
+        if (onEnd) onEnd();
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.95;
+      utterance.pitch = 1.0;
+      utterance.onend = () => { if (onEnd) onEnd(); };
+      utterance.onerror = () => { if (onEnd) onEnd(); };
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // STT: listen for student answer
+    function listenForAnswer(onResult, timeoutMs = 15000) {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        console.warn('[Quiz] SpeechRecognition not supported');
+        onResult('');
+        return;
+      }
+
+      const rec = new SR();
+      rec.lang = 'en-US';
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+      quizState.speechRec = rec;
+
+      let finalTranscript = '';
+      let silenceTimer = null;
+
+      const finish = (transcript) => {
+        clearTimeout(silenceTimer);
+        try { rec.stop(); } catch {}
+        quizState.speechRec = null;
+        onResult(transcript.trim());
+      };
+
+      rec.onresult = (event) => {
+        let interim = '';
+        finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interim += event.results[i][0].transcript;
+          }
+        }
+
+        quizTranscriptDisplay.textContent = '"' + (finalTranscript || interim) + '"';
+
+        if (finalTranscript) {
+          clearTimeout(silenceTimer);
+          silenceTimer = setTimeout(() => finish(finalTranscript), 1500);
+        }
+      };
+
+      rec.onerror = (e) => {
+        console.warn('[Quiz] STT error:', e.error);
+        finish(finalTranscript || '');
+      };
+
+      rec.onend = () => {
+        if (finalTranscript) {
+          finish(finalTranscript);
+        }
+      };
+
+      try {
+        rec.start();
+        quizListeningBadge.style.display = 'block';
+      } catch (e) {
+        console.warn('[Quiz] Could not start STT:', e.message);
+        onResult('');
+      }
+
+      // Hard timeout
+      setTimeout(() => finish(finalTranscript || ''), timeoutMs);
+    }
+
+    // Evaluate the student's answer via backend
+    async function evaluateAnswer(question, expectedAnswer, studentAnswer) {
+      try {
+        const res = await fetch(`${SUPERNODE_URL}/api/quiz/evaluate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question,
+            expectedAnswer,
+            studentAnswer: studentAnswer || 'no answer given',
+            className: selectedClassName,
+          }),
+        });
+        if (!res.ok) throw new Error('evaluate failed');
+        return await res.json();
+      } catch (err) {
+        console.warn('[Quiz] Evaluate error:', err.message);
+        // Fallback: simple keyword match
+        const keywords = expectedAnswer.toLowerCase().split(' ');
+        const ans = (studentAnswer || '').toLowerCase();
+        const matched = keywords.some(kw => kw.length > 3 && ans.includes(kw));
+        return {
+          isCorrect: matched,
+          score: matched ? 7 : 0,
+          feedback: matched ? 'Good effort!' : 'Keep trying next time!',
+          correctAnswer: expectedAnswer,
+        };
+      }
+    }
+
+    async function runQuizQuestion(index) {
+      if (index >= quizState.questions.length) {
+        endQuizSession();
+        return;
+      }
+
+      const q = quizState.questions[index];
+      quizState.currentIndex = index;
+
+      // Update progress
+      quizProgress.textContent = `Question ${index + 1} / ${quizState.questions.length}`;
+
+      // Reset UI
+      quizListeningBadge.style.display = 'none';
+      quizTranscriptDisplay.textContent = '';
+      quizResultCard.classList.remove('show');
+      quizTimerBar.style.transition = 'none';
+      quizTimerBar.style.transform = 'scaleX(1)';
+
+      // Show question
+      quizQuestionText.textContent = q.question;
+
+      // Notify dashboard
+      if (socket && socket.connected) {
+        socket.emit('quiz:question-asked', {
+          questionIndex: index,
+          question: q.question,
+        });
+      }
+
+      // Speak the question
+      await new Promise(resolve => {
+        speak(`Question ${index + 1}. ${q.question}`, resolve);
+      });
+
+      // Short pause
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // Start listening
+      quizListeningBadge.style.display = 'block';
+      quizTimerBar.style.transition = 'transform 15s linear';
+      quizTimerBar.style.transform = 'scaleX(0)';
+
+      const studentAnswer = await new Promise(resolve => listenForAnswer(resolve, 15000));
+
+      quizListeningBadge.style.display = 'none';
+      quizTimerBar.style.transition = 'none';
+      quizTimerBar.style.transform = 'scaleX(0)';
+
+      // Evaluate
+      const result = await evaluateAnswer(q.question, q.expectedAnswer, studentAnswer);
+      quizState.totalScore += (result.score || 0);
+
+      // Show result
+      quizResultIcon.textContent = result.isCorrect ? '✅' : '❌';
+      quizResultVerdict.textContent = result.isCorrect ? 'Correct!' : 'Not quite.';
+      quizResultVerdict.style.color = result.isCorrect ? '#22c55e' : '#ef4444';
+      quizResultFeedback.textContent = result.feedback || '';
+      quizCorrectAnswer.textContent = `Answer: ${result.correctAnswer || q.expectedAnswer}`;
+      quizResultCard.classList.add('show');
+
+      // Log to dashboard
+      if (socket && socket.connected) {
+        socket.emit('quiz:answer-result', {
+          questionIndex: index,
+          question: q.question,
+          studentAnswer,
+          isCorrect: result.isCorrect,
+          score: result.score,
+        });
+      }
+
+      // Speak feedback
+      const feedbackText = result.isCorrect
+        ? `Correct! ${result.feedback || ''}`
+        : `The correct answer is: ${result.correctAnswer || q.expectedAnswer}. ${result.feedback || ''}`;
+
+      await new Promise(resolve => speak(feedbackText, resolve));
+
+      // Pause to show result
+      await new Promise(resolve => setTimeout(resolve, 2500));
+
+      quizResultCard.classList.remove('show');
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    async function runQuizSession(questions) {
+      quizState.active = true;
+      quizState.questions = questions;
+      quizState.currentIndex = 0;
+      quizState.totalScore = 0;
+
+      // Pause video
+      handleVideoPause({ reason: 'quiz' });
+
+      // Show quiz overlay
+      quizOverlay.classList.add('active');
+      quizScoreSummary.textContent = '';
+
+      // Run each question
+      for (let i = 0; i < questions.length; i++) {
+        if (!quizState.active) break;
+        await runQuizQuestion(i);
+      }
+
+      endQuizSession();
+    }
+
+    function endQuizSession() {
+      quizState.active = false;
+
+      const maxScore = quizState.questions.length * 10;
+      const pct = maxScore > 0 ? Math.round((quizState.totalScore / maxScore) * 100) : 0;
+
+      quizScoreSummary.textContent = `Session Score: ${quizState.totalScore} / ${maxScore} (${pct}%)`;
+      quizQuestionText.textContent = 'Great job! Resuming the video...';
+      quizListeningBadge.style.display = 'none';
+      quizResultCard.classList.remove('show');
+
+      // Notify dashboard
+      if (socket && socket.connected) {
+        socket.emit('quiz:session-end', {
+          totalScore: quizState.totalScore,
+          maxScore,
+          answeredCount: quizState.questions.length,
+        });
+      }
+
+      speak(`Quiz complete! You scored ${quizState.totalScore} out of ${maxScore}.`, () => {
+        setTimeout(() => {
+          quizOverlay.classList.remove('active');
+          // Resume video
+          handleVideoResume({ reason: 'quiz_complete' });
+        }, 1500);
+      });
+    }
+
+    // Prepare quiz questions by calling backend
+    async function prepareAndStartQuiz(videoUrl) {
+      if (!selectedClassName) {
+        console.warn('[Quiz] No class selected — skipping quiz');
+        return;
+      }
+
+      console.log('[Quiz] Fetching questions for', videoUrl, 'class:', selectedClassName);
+
+      try {
+        const res = await fetch(`${SUPERNODE_URL}/api/quiz/prepare`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: videoUrl,
+            className: selectedClassName,
+            questionCount: 5,
+          }),
+        });
+
+        if (!res.ok) throw new Error('Failed to prepare quiz');
+        const data = await res.json();
+
+        if (!data.quiz || !Array.isArray(data.quiz.questions) || !data.quiz.questions.length) {
+          throw new Error('No questions returned');
+        }
+
+        // Notify dashboard
+        if (socket && socket.connected) {
+          socket.emit('quiz:session-start', {
+            className: selectedClassName,
+            videoUrl,
+            questionCount: data.quiz.questions.length,
+          });
+        }
+
+        await runQuizSession(data.quiz.questions);
+      } catch (err) {
+        console.error('[Quiz] Failed to start quiz:', err.message);
+        // Resume video if quiz setup fails
+        handleVideoResume({ reason: 'quiz_failed' });
+      }
+    }
+
+
 
     // =================== START ===================
 

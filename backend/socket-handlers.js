@@ -849,6 +849,76 @@ export function setupSocketHandlers(io) {
     socket.on("devices:list", () => {
       socket.emit("devices:list", getDeviceList());
     });
+
+    // =================== QUIZ SESSION EVENTS ===================
+
+    // Classroom registers its class info after class selection
+    socket.on("quiz:set-class", (data) => {
+      const device = deviceRegistry.get(socket.id);
+      if (!device) return;
+      device.className = data.className || "";
+      console.log(`[Quiz] ${device.name} set class to: ${device.className}`);
+      socket.emit("quiz:class-set", { className: device.className });
+    });
+
+    // Quiz session started (from classroom — after video + class selection)
+    socket.on("quiz:session-start", (data) => {
+      const device = deviceRegistry.get(socket.id);
+      if (!device) return;
+      console.log(`[Quiz] Session started on ${device.name} for class: ${data.className}`);
+      io.to("device:dashboard").emit("quiz:session-started", {
+        deviceId: device.deviceId,
+        deviceName: device.name,
+        className: data.className,
+        videoUrl: data.videoUrl,
+        questionCount: data.questionCount,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    // Quiz question being asked (from classroom)
+    socket.on("quiz:question-asked", (data) => {
+      const device = deviceRegistry.get(socket.id);
+      if (!device) return;
+      io.to("device:dashboard").emit("quiz:question-log", {
+        deviceId: device.deviceId,
+        deviceName: device.name,
+        questionIndex: data.questionIndex,
+        question: data.question,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    // Quiz answer received and evaluated (from classroom)
+    socket.on("quiz:answer-result", (data) => {
+      const device = deviceRegistry.get(socket.id);
+      if (!device) return;
+      io.to("device:dashboard").emit("quiz:answer-log", {
+        deviceId: device.deviceId,
+        deviceName: device.name,
+        questionIndex: data.questionIndex,
+        question: data.question,
+        studentAnswer: data.studentAnswer,
+        isCorrect: data.isCorrect,
+        score: data.score,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    // Quiz session ended (from classroom)
+    socket.on("quiz:session-end", (data) => {
+      const device = deviceRegistry.get(socket.id);
+      if (!device) return;
+      console.log(`[Quiz] Session ended on ${device.name}, score: ${data.totalScore}`);
+      io.to("device:dashboard").emit("quiz:session-ended", {
+        deviceId: device.deviceId,
+        deviceName: device.name,
+        totalScore: data.totalScore,
+        maxScore: data.maxScore,
+        answeredCount: data.answeredCount,
+        timestamp: new Date().toISOString(),
+      });
+    });
   });
 }
 
