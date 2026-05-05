@@ -1,0 +1,5 @@
+{
+  "watch": ["*.js"],
+  "ext": "js",
+  "ignore": ["../agentic backend/**", "../frontend/**", "node_modules/**"]
+}

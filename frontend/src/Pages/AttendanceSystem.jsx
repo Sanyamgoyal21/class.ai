@@ -360,7 +360,10 @@ function RecordsPanel() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to send emails')
-      setMailMsg({ type: 'ok', text: data.message })
+      const failDetail = data.failed?.length
+        ? ` | Failed: ${data.failed.map(f => f.error).join('; ')}`
+        : ''
+      setMailMsg({ type: data.sent > 0 ? 'ok' : 'err', text: data.message + failDetail })
     } catch (err) {
       setMailMsg({ type: 'err', text: err.message })
     } finally {

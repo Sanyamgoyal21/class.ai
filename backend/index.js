@@ -2567,22 +2567,33 @@ app.post("/api/attendance/notify-absent", async (req, res) => {
   const { date, className, section } = req.body || {};
   if (!date) return res.status(400).json({ error: "date is required" });
 
-  // 1. Fetch records from Python backend
-  let records;
+  // 1. Fetch records and full student list from Python backend in parallel
+  let records, allStudents;
   try {
     const params = { date };
     if (className) params.className = className;
     if (section)   params.section   = section;
-    const r = await axios.get(attendanceUrl("/attendance/records"), { params });
-    records = r.data.records || [];
+    const [recRes, stuRes] = await Promise.all([
+      axios.get(attendanceUrl("/attendance/records"), { params }),
+      axios.get(attendanceUrl("/attendance/students")),
+    ]);
+    records     = recRes.data.records  || [];
+    allStudents = stuRes.data.students || [];
   } catch (err) {
     return res.status(502).json({ error: "Failed to fetch attendance records", detail: err.message });
   }
 
-  // 2. Filter absent students who have a parent email
-  const absentWithEmail = records.filter(
-    r => r.status !== "present" && r.student?.parentEmail
-  );
+  // Build a lookup map: studentId → full student doc (has parentEmail)
+  const studentMap = Object.fromEntries(allStudents.map(s => [s.id, s]));
+
+  // 2. Filter absent students, enriching the embedded snapshot with parentEmail from the master record
+  const absentWithEmail = records
+    .filter(r => r.status !== "present")
+    .map(r => {
+      const full = studentMap[r.studentId] || {};
+      return { ...r, student: { ...r.student, parentEmail: full.parentEmail || r.student?.parentEmail || "" } };
+    })
+    .filter(r => r.student.parentEmail);
 
   if (absentWithEmail.length === 0) {
     return res.json({ sent: 0, message: "No absent students with a parent email found." });
@@ -2591,12 +2602,20 @@ app.post("/api/attendance/notify-absent", async (req, res) => {
   // 3. Send emails via nodemailer
   const nodemailer = (await import("nodemailer")).default;
   const transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
   });
+
+  try {
+    await transporter.verify();
+  } catch (err) {
+    return res.status(500).json({ error: `SMTP connection failed: ${err.message}. Check EMAIL_USER and EMAIL_PASS in .env` });
+  }
 
   const results = { sent: 0, failed: [] };
   for (const record of absentWithEmail) {
