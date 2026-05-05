@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Class.AI logo">
+  <defs>
+    <linearGradient id="bg" x1="14" y1="8" x2="116" y2="122" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8b2cff"/>
+      <stop offset="0.48" stop-color="#ec3fa4"/>
+      <stop offset="1" stop-color="#ff8a16"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#7c2aed" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+  <rect width="128" height="128" rx="27" fill="url(#bg)"/>
+  <g fill="#fff" filter="url(#softShadow)">
+    <path d="M20.5 48.8 64 27.1l43.5 21.7a4.3 4.3 0 0 1 0 7.7L64 78.3 20.5 56.5a4.3 4.3 0 0 1 0-7.7Z"/>
+    <path d="M38.2 66.3 64 79.2l25.8-12.9v21.2c0 3.5-2.2 6.7-5.5 8.1l-16.9 7.1a8.7 8.7 0 0 1-6.8 0l-16.9-7.1a8.8 8.8 0 0 1-5.5-8.1V66.3Z"/>
+    <rect x="97.8" y="62" width="7.5" height="25" rx="3.8"/>
+    <circle cx="101.5" cy="95.4" r="4.8"/>
+  </g>
+</svg>

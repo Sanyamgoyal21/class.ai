@@ -6,6 +6,8 @@ const PERSON_COOLDOWN_MS    = 12000
 const UNKNOWN_COOLDOWN_MS   = 3000
 const SUCCESS_HOLD_MS       = 4000
 const UNKNOWN_HOLD_MS       = 2000
+const ATTENDANCE_BEEP_SRC   = '/sounds/attendance-beep.mp3'
+const UNKNOWN_BEEP_SRC      = '/sounds/unknown-face-warning.mp3'
 
 const pad = (n) => String(n).padStart(2, '0')
 const fmtTime = () => {
@@ -23,6 +25,8 @@ export default function GateAttendance({ onExit }) {
   const streamRef   = useRef(null)
   const timerRef    = useRef(null)
   const holdRef     = useRef(null)
+  const beepRef     = useRef(null)
+  const unknownBeepRef = useRef(null)
   const busyRef     = useRef(false)
   const cooldownRef = useRef({})
 
@@ -41,6 +45,20 @@ export default function GateAttendance({ onExit }) {
   useEffect(() => {
     const t = setInterval(() => { setClock(fmtTime()); setDate(fmtDate()) }, 1000)
     return () => clearInterval(t)
+  }, [])
+
+  useEffect(() => {
+    beepRef.current = new Audio(ATTENDANCE_BEEP_SRC)
+    beepRef.current.preload = 'auto'
+    unknownBeepRef.current = new Audio(UNKNOWN_BEEP_SRC)
+    unknownBeepRef.current.preload = 'auto'
+  }, [])
+
+  const playBeep = useCallback((audioRef) => {
+    const beep = audioRef.current
+    if (!beep) return
+    beep.currentTime = 0
+    beep.play().catch(() => {})
   }, [])
 
   /* fetch encoding count on mount */
@@ -179,6 +197,7 @@ export default function GateAttendance({ onExit }) {
         const newPhase = alreadyPresent ? 'already' : 'success'
         setLastMatch({ ...match, confidence, alreadyPresent })
         setPhase(newPhase)
+        playBeep(beepRef)
         holdRef.current = setTimeout(() => setPhase('scanning'), SUCCESS_HOLD_MS)
 
         const entry = {
@@ -194,6 +213,7 @@ export default function GateAttendance({ onExit }) {
       } else {
         setPhase('unknown')
         setLastMatch(null)
+        playBeep(unknownBeepRef)
         holdRef.current = setTimeout(() => setPhase('scanning'), UNKNOWN_HOLD_MS)
         setStats(p => ({ ...p, unknown: p.unknown + 1 }))
       }
