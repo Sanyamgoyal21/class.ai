@@ -1,0 +1,30 @@
+[
+  {
+    "id": "e96b9c75-b8f6-4686-a8a4-28ee9cda1511",
+    "studentId": "7067b176-c566-4b52-bf12-5252c492dca2",
+    "student": {
+      "name": "Prantik Sanki",
+      "rollNumber": "R2142231381",
+      "className": "B.Tech CSE",
+      "section": "AI ML",
+      "parentMobile": "9339669870"
+    },
+    "date": "2026-05-06",
+    "status": "absent",
+    "markedAt": "2026-05-06T07:05:46.363730Z"
+  },
+  {
+    "id": "9af3c653-d157-4ebc-980c-a84a0d5e69a6",
+    "studentId": "8dcd3018-5fb9-4a11-ba03-629b7b714fde",
+    "student": {
+      "name": "Sanyam Goyal",
+      "rollNumber": "R215664784",
+      "className": "B.Tech CSE",
+      "section": "AI ML",
+      "parentMobile": "9339669874"
+    },
+    "date": "2026-05-06",
+    "status": "absent",
+    "markedAt": "2026-05-06T07:05:52.416575Z"
+  }
+]

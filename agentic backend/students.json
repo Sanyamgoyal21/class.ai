@@ -23,6 +23,32 @@
         "Attendance by ArcFace\\dataset\\Prantik Sanki_12.jpg"
       ],
       "registeredAt": "2026-05-05T17:38:40.360978Z"
+    },
+    {
+      "id": "8dcd3018-5fb9-4a11-ba03-629b7b714fde",
+      "name": "Sanyam Goyal",
+      "rollNumber": "R215664784",
+      "className": "B.Tech CSE",
+      "section": "AI ML",
+      "parentMobile": "9339669874",
+      "parentEmail": "sanyamgoyal21@gmail.com",
+      "sampleImagePaths": [
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_2.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_3.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_4.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_5.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_11.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_12.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_13.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_14.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_15.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_16.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_17.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_18.jpg",
+        "Attendance by ArcFace\\dataset\\Sanyam Goyal_19.jpg"
+      ],
+      "registeredAt": "2026-05-06T05:43:21.741946Z"
     }
   ]
 }

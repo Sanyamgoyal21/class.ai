@@ -2880,39 +2880,49 @@ function extractYouTubeVideoId(url) {
 
 async function fetchYouTubeTranscript(videoId) {
   try {
-    // Fetch YouTube's timedtext API (works for auto-generated captions)
-    const response = await axios.get(
-      `https://www.youtube.com/watch?v=${videoId}`,
-      { headers: { "User-Agent": "Mozilla/5.0" }, timeout: 10000 }
-    );
-    const html = response.data;
-
-    // Extract caption tracks from the page
-    const captionMatch = html.match(/"captionTracks":\[(.*?)\]/);
-    if (!captionMatch) return null;
-
-    const tracksJson = JSON.parse(`[${captionMatch[1]}]`);
-    if (!tracksJson.length) return null;
-
-    // Prefer English captions
-    const track = tracksJson.find(t => t.languageCode === 'en') || tracksJson[0];
-    if (!track?.baseUrl) return null;
-
-    const captionRes = await axios.get(track.baseUrl, { timeout: 10000 });
-    const xmlText = captionRes.data;
-
-    // Parse XML caption text
-    const textMatches = xmlText.match(/<text[^>]*>([^<]*)<\/text>/g) || [];
-    const transcript = textMatches
-      .map(tag => tag.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim())
-      .filter(Boolean)
-      .join(' ');
-
+    const { YoutubeTranscript } = await import('youtube-transcript');
+    const segments = await YoutubeTranscript.fetchTranscript(videoId);
+    if (!segments || !segments.length) return null;
+    const transcript = segments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
     return transcript.length > 100 ? transcript : null;
   } catch (err) {
-    console.warn('[Quiz] Transcript fetch failed:', err.message);
+    console.warn('[Quiz] youtube-transcript fetch failed:', err.message);
     return null;
   }
+}
+
+async function fetchYouTubeTitle(videoId) {
+  // Try ytdl-core first (most reliable)
+  try {
+    const ytdl = require('ytdl-core');
+    const info = await ytdl.getBasicInfo(`https://www.youtube.com/watch?v=${videoId}`);
+    const title = info.videoDetails?.title;
+    if (title && title.trim()) return title.trim();
+  } catch (err) {
+    console.warn('[Quiz] ytdl-core title fetch failed:', err.message);
+  }
+
+  // Fallback: oembed API
+  try {
+    const res = await axios.get(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`, {
+      timeout: 6000,
+    });
+    if (res.data?.title) return res.data.title.trim();
+  } catch {}
+
+  // Fallback: scrape og:title from HTML
+  try {
+    const res = await axios.get(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)' },
+      timeout: 8000,
+    });
+    const ogMatch = res.data.match(/<meta property="og:title" content="([^"]+)"/);
+    if (ogMatch) return ogMatch[1].trim();
+    const titleMatch = res.data.match(/"title":"([^"]+)"/);
+    if (titleMatch) return titleMatch[1].trim();
+  } catch {}
+
+  return null;
 }
 
 async function generateQuizQuestions(transcript, videoTitle, className, questionCount = 5) {
@@ -2924,22 +2934,7 @@ async function generateQuizQuestions(transcript, videoTitle, className, question
     ? `This is for students of class: ${className}. Adjust difficulty and vocabulary accordingly.`
     : 'Adjust difficulty for a general student audience.';
 
-  const systemPrompt = `You are an expert teacher generating quiz questions for a classroom video session.
-
-${classContext}
-
-Generate exactly ${questionCount} questions based on the video content provided.
-
-Rules:
-- Questions must be based strictly on the video content
-- Use simple, clear language appropriate for the class level
-- Each question should have ONE correct short answer (1-5 words)
-- Make questions progressively harder
-- Mix factual and conceptual questions
-- Avoid trick questions
-
-Respond with ONLY valid JSON, no markdown, no extra text:
-{
+  const jsonSchema = `{
   "videoTitle": "...",
   "className": "...",
   "questions": [
@@ -2947,15 +2942,44 @@ Respond with ONLY valid JSON, no markdown, no extra text:
       "id": 1,
       "question": "What is ...?",
       "expectedAnswer": "...",
-      "hint": "Think about what was explained when ...",
+      "hint": "Think about ...",
       "difficulty": "easy"
     }
   ]
 }`;
 
-  const userPrompt = transcript
-    ? `Video Title: ${videoTitle || 'Educational Video'}\nTranscript:\n${transcript.slice(0, 6000)}`
-    : `Video Title: ${videoTitle || 'Educational Video'}\n\nNote: No transcript available. Generate general questions about the topic suggested by the title.`;
+  let systemPrompt, userPrompt;
+
+  if (transcript) {
+    systemPrompt = `You are an expert teacher generating quiz questions for a classroom video session.
+${classContext}
+Generate exactly ${questionCount} questions based ONLY on the transcript provided below.
+Rules:
+- Questions must come directly from what is said/shown in the transcript — never invent facts
+- Use simple, clear language appropriate for the class level
+- Each question should have ONE correct short answer (1-5 words)
+- Make questions progressively harder
+- Mix factual and conceptual questions
+Respond with ONLY valid JSON, no markdown, no extra text:\n${jsonSchema}`;
+
+    userPrompt = `Video Title: ${videoTitle}\n\nTranscript:\n${transcript.slice(0, 6000)}`;
+  } else {
+    // No transcript available — generate questions STRICTLY about the topic in the title
+    const topic = videoTitle || 'the topic in the video';
+    systemPrompt = `You are an expert teacher generating quiz questions for a classroom video session.
+${classContext}
+IMPORTANT: No transcript is available. You must generate questions STRICTLY about the subject: "${topic}".
+Do NOT ask questions about YouTube, video platforms, or anything unrelated to "${topic}".
+Generate exactly ${questionCount} factual questions that a student watching a video titled "${topic}" should be able to answer.
+Each question must be directly about concepts, definitions, or facts within the topic "${topic}".
+Rules:
+- Only ask about "${topic}" — nothing else
+- Each question should have ONE correct short answer (1-5 words)
+- Make questions progressively harder
+Respond with ONLY valid JSON, no markdown, no extra text:\n${jsonSchema}`;
+
+    userPrompt = `The video is titled: "${topic}"\nGenerate ${questionCount} quiz questions specifically about this subject.`;
+  }
 
   const raw = await callOpenRouter(systemPrompt, userPrompt);
   return parseJsonResponse(raw);
@@ -2976,17 +3000,26 @@ app.post('/api/quiz/prepare', async (req, res) => {
   try {
     console.log(`[Quiz] Preparing quiz for video ${videoId}, class: ${className}`);
 
-    const [transcript] = await Promise.all([
+    const [transcript, videoTitle] = await Promise.all([
       fetchYouTubeTranscript(videoId),
+      fetchYouTubeTitle(videoId),
     ]);
 
-    const videoTitle = `YouTube Video (${videoId})`;
-    const quiz = await generateQuizQuestions(transcript, videoTitle, className, Math.min(questionCount, 10));
+    const title = videoTitle || null;
+    console.log(`[Quiz] Title: "${title || '(unknown)'}" | Transcript: ${transcript ? transcript.length + ' chars' : 'NONE'}`);
+
+    if (!transcript && !title) {
+      console.warn('[Quiz] No transcript AND no title — cannot generate meaningful questions');
+      return res.status(422).json({ error: 'Cannot fetch video information. The video may be private, region-restricted, or unavailable.' });
+    }
+
+    const quiz = await generateQuizQuestions(transcript, title || `video ${videoId}`, className, Math.min(questionCount, 10));
 
     return res.json({
       success: true,
       videoId,
-      transcript: transcript ? transcript.slice(0, 500) + '...' : null,
+      videoTitle: title,
+      transcript: transcript ? transcript.slice(0, 300) + '...' : null,
       quiz,
     });
   } catch (err) {

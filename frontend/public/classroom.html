@@ -512,19 +512,62 @@
     }
 
     #quiz-listening-badge {
-      background: #dc2626;
-      color: white;
-      padding: 10px 28px;
-      border-radius: 30px;
-      font-size: 1rem;
-      font-weight: 600;
       display: none;
-      animation: listeningPulse 1s infinite;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
     }
 
-    @keyframes listeningPulse {
-      0%, 100% { background: #dc2626; }
-      50% { background: #ef4444; }
+    #quiz-listening-badge.active { display: flex; }
+
+    .quiz-mic-ring {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: micRing 1.2s ease-out infinite;
+    }
+
+    .quiz-mic-icon {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      background: #ef4444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+      animation: micPulse 1.2s ease-out infinite;
+    }
+
+    @keyframes micRing {
+      0% { transform: scale(0.95); opacity: 0.6; }
+      50% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.6; }
+    }
+
+    @keyframes micPulse {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70% { box-shadow: 0 0 0 18px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+
+    .quiz-listening-label {
+      color: #ef4444;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      animation: listeningBlink 1.2s ease-in-out infinite;
+    }
+
+    @keyframes listeningBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
     }
 
     #quiz-transcript-display {
@@ -716,7 +759,12 @@
       <div id="quiz-progress">Question 1 / 5</div>
       <div id="quiz-question-text">Loading question...</div>
       <div id="quiz-status-area">
-        <div id="quiz-listening-badge">Listening...</div>
+        <div id="quiz-listening-badge">
+          <div class="quiz-mic-ring">
+            <div class="quiz-mic-icon">🎤</div>
+          </div>
+          <div class="quiz-listening-label">Listening...</div>
+        </div>
         <div id="quiz-transcript-display"></div>
         <div id="quiz-result-card">
           <div id="quiz-result-icon"></div>
@@ -1026,6 +1074,12 @@
       // Always arm scheduler when a video starts — quiz will check selectedClassName at fire time
       if (playableUrl) {
         stopQuizScheduler();
+        // Reset question cache if it's a different video
+        if (playableUrl !== cachedQuizUrl) {
+          cachedQuizQuestions = [];
+          cachedQuizUrl = null;
+          quizState.askedCount = 0;
+        }
         startQuizScheduler(playableUrl);
       }
 
@@ -2060,6 +2114,23 @@ If no context is available, answer the question to the best of your ability.`;
 
     // =================== VOICE COMMANDS ===================
 
+    let voiceCommandsRec = null;
+    let voiceCommandsPaused = false;
+
+    function pauseVoiceCommands() {
+      voiceCommandsPaused = true;
+      if (voiceCommandsRec) {
+        try { voiceCommandsRec.abort(); } catch {}
+      }
+    }
+
+    function resumeVoiceCommands() {
+      voiceCommandsPaused = false;
+      if (voiceCommandsRec) {
+        try { voiceCommandsRec.start(); } catch {}
+      }
+    }
+
     function startVoiceCommands() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) {
@@ -2071,6 +2142,7 @@ If no context is available, answer the question to the best of your ability.`;
       recognition.continuous = true;
       recognition.interimResults = false;
       recognition.lang = 'en-US';
+      voiceCommandsRec = recognition;
 
       recognition.onresult = (event) => {
         const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
@@ -2078,7 +2150,6 @@ If no context is available, answer the question to the best of your ability.`;
 
         if (transcript.includes('doubt')) {
           console.log('[Classroom] "Doubt" detected — navigating to DoubtCanvas');
-          // Save current video position so we can resume after doubt is resolved
           const snapTime = videoPlayer.src && !videoPlayer.paused
             ? videoPlayer.currentTime
             : (ytPlayer?.getCurrentTime ? ytPlayer.getCurrentTime() : currentVideoTime);
@@ -2096,9 +2167,11 @@ If no context is available, answer the question to the best of your ability.`;
         }
       };
 
-      // Keep recognition alive
+      // Keep recognition alive — but NOT during quiz listening
       recognition.onend = () => {
-        try { recognition.start(); } catch { /* ignore */ }
+        if (!voiceCommandsPaused) {
+          try { recognition.start(); } catch { /* ignore */ }
+        }
       };
 
       try {
@@ -2161,10 +2234,14 @@ If no context is available, answer the question to the best of your ability.`;
       questions: [],
       currentIndex: 0,
       totalScore: 0,
+      askedCount: 0,
       intervalId: null,
       speechRec: null,
       timerTimeout: null,
     };
+
+    let cachedQuizQuestions = [];
+    let cachedQuizUrl = null;
 
     // TTS: speak text aloud
     function speak(text, onEnd) {
@@ -2183,7 +2260,7 @@ If no context is available, answer the question to the best of your ability.`;
     }
 
     // STT: listen for student answer
-    function listenForAnswer(onResult, timeoutMs = 15000) {
+    async function listenForAnswer(onResult, timeoutMs = 15000) {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) {
         console.warn('[Quiz] SpeechRecognition not supported');
@@ -2191,62 +2268,92 @@ If no context is available, answer the question to the best of your ability.`;
         return;
       }
 
+      // Stop any existing voice recognition (e.g. doubt/voice commands) before starting quiz STT
+      if (quizState.speechRec) {
+        try { quizState.speechRec.abort(); } catch {}
+        quizState.speechRec = null;
+      }
+
       const rec = new SR();
       rec.lang = 'en-US';
       rec.interimResults = true;
+      rec.continuous = false;
       rec.maxAlternatives = 1;
       quizState.speechRec = rec;
 
-      let finalTranscript = '';
+      let bestTranscript = '';
+      let finished = false;
       let silenceTimer = null;
+      let hardTimer = null;
 
       const finish = (transcript) => {
+        if (finished) return;
+        finished = true;
         clearTimeout(silenceTimer);
-        try { rec.stop(); } catch {}
+        clearTimeout(hardTimer);
+        try { rec.abort(); } catch {}
         quizState.speechRec = null;
+        console.log('[Quiz] STT captured:', transcript);
+        // Resume voice commands after quiz STT is done
+        resumeVoiceCommands();
         onResult(transcript.trim());
       };
 
       rec.onresult = (event) => {
         let interim = '';
-        finalTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
+            bestTranscript += event.results[i][0].transcript;
           } else {
             interim += event.results[i][0].transcript;
           }
         }
 
-        quizTranscriptDisplay.textContent = '"' + (finalTranscript || interim) + '"';
+        const displayed = bestTranscript || interim;
+        quizTranscriptDisplay.textContent = displayed ? `"${displayed}"` : '';
 
-        if (finalTranscript) {
+        // Once we have a final result, wait briefly for more speech then finish
+        if (bestTranscript) {
           clearTimeout(silenceTimer);
-          silenceTimer = setTimeout(() => finish(finalTranscript), 1500);
+          silenceTimer = setTimeout(() => finish(bestTranscript), 1800);
         }
       };
 
       rec.onerror = (e) => {
         console.warn('[Quiz] STT error:', e.error);
-        finish(finalTranscript || '');
-      };
-
-      rec.onend = () => {
-        if (finalTranscript) {
-          finish(finalTranscript);
+        // On "no-speech" let the hard timeout handle it; on other errors finish immediately
+        if (e.error !== 'no-speech') {
+          finish(bestTranscript);
         }
       };
 
+      rec.onend = () => {
+        // onend fires after abort/stop — only finish if not already done
+        if (!finished) finish(bestTranscript);
+      };
+
+      // Pause continuous voice-command recognition so it doesn't compete with quiz STT
+      pauseVoiceCommands();
+
+      // Small delay to let voice commands fully stop before starting quiz STT
+      await new Promise(resolve => setTimeout(resolve, 300));
+
       try {
         rec.start();
-        quizListeningBadge.style.display = 'block';
+        console.log('[Quiz] STT started, listening...');
+        quizListeningBadge.classList.add('active');
       } catch (e) {
         console.warn('[Quiz] Could not start STT:', e.message);
+        resumeVoiceCommands();
         onResult('');
+        return;
       }
 
-      // Hard timeout
-      setTimeout(() => finish(finalTranscript || ''), timeoutMs);
+      // Hard timeout — finish with whatever we got
+      hardTimer = setTimeout(() => {
+        console.log('[Quiz] STT hard timeout, best so far:', bestTranscript);
+        finish(bestTranscript);
+      }, timeoutMs);
     }
 
     // Evaluate the student's answer via backend
@@ -2292,7 +2399,7 @@ If no context is available, answer the question to the best of your ability.`;
       quizProgress.textContent = `Question ${index + 1} / ${quizState.questions.length}`;
 
       // Reset UI
-      quizListeningBadge.style.display = 'none';
+      quizListeningBadge.classList.remove('active');
       quizTranscriptDisplay.textContent = '';
       quizResultCard.classList.remove('show');
       quizTimerBar.style.transition = 'none';
@@ -2318,13 +2425,13 @@ If no context is available, answer the question to the best of your ability.`;
       await new Promise(resolve => setTimeout(resolve, 600));
 
       // Start listening
-      quizListeningBadge.style.display = 'block';
+      quizListeningBadge.classList.add('active');
       quizTimerBar.style.transition = 'transform 15s linear';
       quizTimerBar.style.transform = 'scaleX(0)';
 
       const studentAnswer = await new Promise(resolve => listenForAnswer(resolve, 15000));
 
-      quizListeningBadge.style.display = 'none';
+      quizListeningBadge.classList.remove('active');
       quizTimerBar.style.transition = 'none';
       quizTimerBar.style.transform = 'scaleX(0)';
 
@@ -2368,21 +2475,20 @@ If no context is available, answer the question to the best of your ability.`;
     async function runQuizSession(questions) {
       quizState.active = true;
       quizState.questions = questions;
-      quizState.currentIndex = 0;
-      quizState.totalScore = 0;
+
+      // Pick the next unused question index
+      const idx = quizState.askedCount;
+      quizState.askedCount += 1;
 
       // Pause video
       handleVideoPause({ reason: 'quiz' });
 
       // Show quiz overlay
       quizOverlay.classList.add('active');
-      quizScoreSummary.textContent = '';
+      quizScoreSummary.textContent = `Score so far: ${quizState.totalScore} pts`;
+      quizProgress.textContent = `Question ${idx + 1} of ${questions.length}`;
 
-      // Run each question
-      for (let i = 0; i < questions.length; i++) {
-        if (!quizState.active) break;
-        await runQuizQuestion(i);
-      }
+      await runQuizQuestion(idx);
 
       endQuizSession();
     }
@@ -2390,72 +2496,98 @@ If no context is available, answer the question to the best of your ability.`;
     function endQuizSession() {
       quizState.active = false;
 
-      const maxScore = quizState.questions.length * 10;
-      const pct = maxScore > 0 ? Math.round((quizState.totalScore / maxScore) * 100) : 0;
-
-      quizScoreSummary.textContent = `Session Score: ${quizState.totalScore} / ${maxScore} (${pct}%)`;
       quizQuestionText.textContent = 'Great job! Resuming the video...';
-      quizListeningBadge.style.display = 'none';
+      quizListeningBadge.classList.remove('active');
       quizResultCard.classList.remove('show');
 
-      // Notify dashboard
-      if (socket && socket.connected) {
+      const askedSoFar = quizState.askedCount;
+      const maxSoFar = askedSoFar * 10;
+
+      quizScoreSummary.textContent = `Score: ${quizState.totalScore} / ${maxSoFar}`;
+
+      const allDone = quizState.askedCount >= quizState.questions.length;
+      const speechText = allDone
+        ? `All questions done! Final score: ${quizState.totalScore} out of ${maxSoFar}.`
+        : `Good job! Score so far: ${quizState.totalScore}. Resuming the video.`;
+
+      if (socket && socket.connected && allDone) {
         socket.emit('quiz:session-end', {
           totalScore: quizState.totalScore,
-          maxScore,
-          answeredCount: quizState.questions.length,
+          maxScore: maxSoFar,
+          answeredCount: askedSoFar,
         });
       }
 
-      speak(`Quiz complete! You scored ${quizState.totalScore} out of ${maxScore}.`, () => {
+      speak(speechText, () => {
         setTimeout(() => {
           quizOverlay.classList.remove('active');
-          // Resume video
           handleVideoResume({ reason: 'quiz_complete' });
-        }, 1500);
+        }, 1200);
       });
     }
 
-    // Prepare quiz questions by calling backend
     async function prepareAndStartQuiz(videoUrl) {
       if (!selectedClassName) {
         console.warn('[Quiz] No class selected — skipping quiz');
         return;
       }
 
-      console.log('[Quiz] Fetching questions for', videoUrl, 'class:', selectedClassName);
-
       try {
-        const res = await fetch(`${SUPERNODE_URL}/api/quiz/prepare`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: videoUrl,
-            className: selectedClassName,
-            questionCount: 5,
-          }),
-        });
+        // Fetch questions only once per video URL
+        if (cachedQuizUrl !== videoUrl || !cachedQuizQuestions.length) {
+          console.log('[Quiz] Fetching questions for', videoUrl, 'class:', selectedClassName);
+          quizState.askedCount = 0;
+          quizState.totalScore = 0;
 
-        if (!res.ok) throw new Error('Failed to prepare quiz');
-        const data = await res.json();
-
-        if (!data.quiz || !Array.isArray(data.quiz.questions) || !data.quiz.questions.length) {
-          throw new Error('No questions returned');
-        }
-
-        // Notify dashboard
-        if (socket && socket.connected) {
-          socket.emit('quiz:session-start', {
-            className: selectedClassName,
-            videoUrl,
-            questionCount: data.quiz.questions.length,
+          const res = await fetch(`${SUPERNODE_URL}/api/quiz/prepare`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: videoUrl,
+              className: selectedClassName,
+              questionCount: 5,
+            }),
           });
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            const msg = errData.error || 'Failed to prepare quiz';
+            console.warn('[Quiz] Server error:', msg);
+            // For unavailable videos, mark the URL so we don't retry
+            cachedQuizUrl = videoUrl;
+            cachedQuizQuestions = [];
+            handleVideoResume({ reason: 'quiz_unavailable' });
+            return;
+          }
+          const data = await res.json();
+
+          if (!data.quiz || !Array.isArray(data.quiz.questions) || !data.quiz.questions.length) {
+            throw new Error('No questions returned');
+          }
+
+          cachedQuizQuestions = data.quiz.questions;
+          cachedQuizUrl = videoUrl;
+          console.log(`[Quiz] Got ${cachedQuizQuestions.length} questions, will ask one per trigger`);
+
+          if (socket && socket.connected) {
+            socket.emit('quiz:session-start', {
+              className: selectedClassName,
+              videoUrl,
+              questionCount: cachedQuizQuestions.length,
+            });
+          }
         }
 
-        await runQuizSession(data.quiz.questions);
+        // If we've used all questions, stop
+        const idx = quizState.askedCount || 0;
+        if (idx >= cachedQuizQuestions.length) {
+          console.log('[Quiz] All questions used for this video');
+          return;
+        }
+
+        await runQuizSession(cachedQuizQuestions);
       } catch (err) {
         console.error('[Quiz] Failed to start quiz:', err.message);
-        // Resume video if quiz setup fails
         handleVideoResume({ reason: 'quiz_failed' });
       }
     }
