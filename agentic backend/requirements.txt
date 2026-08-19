@@ -18,6 +18,12 @@ Pillow==10.4.0
 # a C++ toolchain, several minutes, >1GB RAM) — too fragile for Render's
 # build environment. dlib-bin ships the same binary prebuilt, no compile step.
 dlib-bin==20.0.1
+# face_recognition_models uses pkg_resources (from setuptools) at import time
+# to locate its .dat model files. Modern venvs don't guarantee setuptools is
+# preinstalled, so without this the import throws ModuleNotFoundError, which
+# face_recognition's own except-block swallows and reports as a misleading
+# "please install face_recognition_models" message even though it IS installed.
+setuptools==75.6.0
 face_recognition_models==0.3.0
 
 # face_recognition==1.3.0 is intentionally NOT listed here: its metadata
