@@ -1,10 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { ATTENDANCE_API_URL as _BASE, BACKEND_URL } from '../utils/backendUrl'
-
-// Attendance API must always reach the local Python service directly.
-const ATTENDANCE_API_URL = _BASE.includes('localhost') || _BASE.includes('127.0.0.1')
-  ? _BASE
-  : 'http://localhost:8000/attendance'
+import { ATTENDANCE_API_URL, BACKEND_URL } from '../utils/backendUrl'
 
 const today = () => {
   const d = new Date()
