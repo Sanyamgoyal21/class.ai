@@ -13,11 +13,16 @@ pymongo==4.9.2
 # Vision / face recognition
 numpy==1.26.4
 opencv-python-headless==4.10.0.84
-# dlib compiles from source and needs a working C++ toolchain + cmake;
-# it can take several minutes to build and needs >1GB RAM during compile,
-# which can OOM on Render's free tier. If the build fails or times out,
-# swap this line for `dlib-bin==19.24.6` (prebuilt wheel, no compilation).
-cmake==3.31.2
-dlib==19.24.6
-face_recognition==1.3.0
+Pillow==10.4.0
+# dlib has no official PyPI wheels and compiles from source (needs cmake +
+# a C++ toolchain, several minutes, >1GB RAM) — too fragile for Render's
+# build environment. dlib-bin ships the same binary prebuilt, no compile step.
+dlib-bin==19.24.6
 face_recognition_models==0.3.0
+
+# face_recognition==1.3.0 is intentionally NOT listed here: its metadata
+# hard-requires "dlib" by name, which would make pip compile the real dlib
+# from source even with dlib-bin already installed above. The Render build
+# command installs it separately with --no-deps so it just uses the deps
+# already satisfied in this file instead of chasing that requirement:
+#   pip install -r requirements.txt && pip install --no-deps face_recognition==1.3.0
