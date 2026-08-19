@@ -17,7 +17,7 @@ Pillow==10.4.0
 # dlib has no official PyPI wheels and compiles from source (needs cmake +
 # a C++ toolchain, several minutes, >1GB RAM) — too fragile for Render's
 # build environment. dlib-bin ships the same binary prebuilt, no compile step.
-dlib-bin==19.24.6
+dlib-bin==20.0.1
 face_recognition_models==0.3.0
 
 # face_recognition==1.3.0 is intentionally NOT listed here: its metadata
