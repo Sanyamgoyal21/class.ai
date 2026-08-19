@@ -124,6 +124,13 @@ def _strip_mongo_id(doc: dict) -> dict:
     return doc
 
 
+def _public_student(doc: dict) -> dict:
+    """Student doc for HTTP responses — omits the (large) stored face images."""
+    doc = _strip_mongo_id(dict(doc))
+    doc.pop("sampleImages", None)
+    return doc
+
+
 # ---------------------------------------------------------------------------
 # Student storage  (MongoDB primary, JSON fallback)
 # ---------------------------------------------------------------------------
@@ -385,15 +392,31 @@ def reload_face_encodings(students: list):
 
     for student in students:
         cache[student["id"]] = student
-        for img_path_str in student.get("sampleImagePaths", []):
-            p = _abs(img_path_str)
-            if not p.exists():
-                print(f"[encoding] missing file: {p}")
-                continue
+        images_b64 = student.get("sampleImages") or []
+        # Sample images live in Mongo (survives redeploys); local disk paths are
+        # only a fallback for legacy records that predate that field.
+        sources = images_b64 if images_b64 else student.get("sampleImagePaths", [])
+
+        for idx, source in enumerate(sources):
+            label = f"sample #{idx+1} for {student['name']}"
             try:
-                with _fr_lock:
+                if images_b64:
+                    img_bytes = base64.b64decode(source)
+                    nparr = np.frombuffer(img_bytes, np.uint8)
+                    bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    if bgr is None:
+                        print(f"[encoding] could not decode {label}")
+                        continue
+                    image = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                else:
+                    p = _abs(source)
+                    if not p.exists():
+                        print(f"[encoding] missing file: {p}")
+                        continue
                     image = face_recognition.load_image_file(str(p))
-                    h, w = image.shape[:2]
+
+                h, w = image.shape[:2]
+                with _fr_lock:
                     found = face_recognition.face_encodings(image)
                     if not found:
                         found = face_recognition.face_encodings(image, known_face_locations=[(0, w, h, 0)])
@@ -401,9 +424,9 @@ def reload_face_encodings(students: list):
                     encodings.append(found[0])
                     student_ids.append(student["id"])
                 else:
-                    print(f"[encoding] no face found in {p.name}, skipping")
+                    print(f"[encoding] no face found in {label}, skipping")
             except Exception as exc:
-                print(f"[encoding] skipping {p.name}: {exc}")
+                print(f"[encoding] skipping {label}: {exc}")
 
     with _enc_lock:
         _known_encodings = encodings
@@ -585,6 +608,7 @@ async def register_student(request: Request):
     DATASET_PATH.mkdir(parents=True, exist_ok=True)
     safe_name = safe_file_name(name)
     saved_paths: list = []
+    saved_images_b64: list = []
     skipped = 0
 
     for img_data in images_b64:
@@ -612,6 +636,13 @@ async def register_student(request: Request):
         cv2.imwrite(str(img_path), frame)
         saved_paths.append(_rel(str(img_path)))
 
+        # Stored in Mongo too — local disk is ephemeral on Render and gets
+        # wiped on every redeploy, which would otherwise silently break
+        # recognition for everyone already registered.
+        ok_enc, jpeg_bytes = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if ok_enc:
+            saved_images_b64.append(base64.b64encode(jpeg_bytes.tobytes()).decode("ascii"))
+
     if not saved_paths:
         raise HTTPException(status_code=400, detail="No valid images could be decoded")
 
@@ -622,6 +653,7 @@ async def register_student(request: Request):
         existing["sampleImagePaths"] = list(dict.fromkeys(
             [_rel(p) for p in existing["sampleImagePaths"]] + saved_paths
         ))
+        existing["sampleImages"] = (existing.get("sampleImages") or []) + saved_images_b64
         existing["rollNumber"]   = roll_number
         existing["className"]    = class_name
         existing["section"]      = section
@@ -637,13 +669,14 @@ async def register_student(request: Request):
             "parentMobile": parent_mobile,
             "parentEmail": parent_email,
             "sampleImagePaths": saved_paths,
+            "sampleImages": saved_images_b64,
             "registeredAt": datetime.utcnow().isoformat() + "Z",
         }
 
     await save_student(existing)
     all_students = await load_students()
     reload_face_encodings(all_students)
-    return {"student": existing}
+    return {"student": _public_student(existing)}
 
 
 @app.post("/attendance/detect-face")
@@ -746,7 +779,7 @@ async def recognize_endpoint(request: Request):
 
 @app.get("/attendance/students")
 async def get_students():
-    return {"students": await load_students()}
+    return {"students": [_public_student(s) for s in await load_students()]}
 
 
 @app.get("/attendance/students/{student_id}/history")
